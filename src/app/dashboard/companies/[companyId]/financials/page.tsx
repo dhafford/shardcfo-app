@@ -1,11 +1,32 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
-import { PeriodSelector, getDateRangeFromParams } from "@/components/shared/period-selector";
+import Link from "next/link";
+import { PeriodSelector } from "@/components/shared/period-selector";
 import { PnlTable } from "@/components/financials/pnl-table";
 import { FinancialsToolbar } from "@/components/financials/financials-toolbar";
-import { format } from "date-fns";
+import { format, subMonths, startOfMonth } from "date-fns";
 import type { PnlDataPoint, ComparisonMode } from "@/components/financials/pnl-table";
 import type { FinancialPeriodRow, AccountRow, LineItemRow } from "@/lib/supabase/types";
+
+type Granularity = "monthly" | "quarterly" | "annual";
+
+function getDateRangeFromParams(searchParams: {
+  range?: string;
+  granularity?: string;
+}): { startDate: Date; endDate: Date; granularity: Granularity } {
+  const now = startOfMonth(new Date());
+  const months = parseInt(searchParams.range || "12", 10);
+  const granularity = (searchParams.granularity as Granularity) || "monthly";
+
+  let startDate: Date;
+  if (months === -1) {
+    startDate = new Date(now.getFullYear(), 0, 1);
+  } else {
+    startDate = subMonths(now, months - 1);
+  }
+
+  return { startDate, endDate: now, granularity };
+}
 
 interface FinancialsPageProps {
   params: Promise<{ companyId: string }>;
@@ -175,6 +196,18 @@ export default async function FinancialsPage({ params, searchParams }: Financial
       <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b bg-white px-6 py-3">
         <PeriodSelector />
         <div className="ml-auto flex items-center gap-2">
+          <Link
+            href={`/dashboard/companies/${companyId}/financials/import`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 h-8 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+          >
+            Import Data
+          </Link>
+          <Link
+            href={`/dashboard/companies/${companyId}/financials/accounts`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 h-8 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+          >
+            Accounts
+          </Link>
           <FinancialsToolbar
             companyId={companyId}
             currentView={view}
