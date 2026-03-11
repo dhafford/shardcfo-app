@@ -14,7 +14,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Save, Loader2 } from "lucide-react";
-import { updateScenario } from "@/app/(dashboard)/companies/[companyId]/scenarios/actions";
+import { updateScenario } from "@/app/dashboard/companies/[companyId]/scenarios/actions";
 import type {
   ScenarioAssumptions,
   HirePlan,

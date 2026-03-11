@@ -4,15 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { METRIC_DEFINITIONS } from "@/lib/constants";
-import type { MetricCategory } from "@/lib/supabase/types";
+import type { FinancialPeriodRow, AccountRow, LineItemRow, MetricRow } from "@/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
 // saveMetric
 // ---------------------------------------------------------------------------
 
 /**
- * Saves a manually entered metric value for a given company and period.
- * Upserts based on (company_id, financial_period_id, slug).
+ * Saves a manually entered metric value for a given company and period date.
+ * Upserts based on (company_id, period_date, metric_key).
  */
 export async function saveMetric(formData: FormData) {
   const supabase = await createClient();
@@ -23,12 +23,12 @@ export async function saveMetric(formData: FormData) {
   if (!user) redirect("/login");
 
   const companyId = formData.get("companyId") as string;
-  const periodId = formData.get("periodId") as string;
-  const slug = formData.get("slug") as string;
+  const periodDate = formData.get("periodDate") as string;
+  const metricKey = formData.get("metricKey") as string;
   const rawValue = formData.get("value") as string;
 
-  if (!companyId || !periodId || !slug || !rawValue) {
-    throw new Error("Missing required fields: companyId, periodId, slug, value");
+  if (!companyId || !periodDate || !metricKey || !rawValue) {
+    throw new Error("Missing required fields: companyId, periodDate, metricKey, value");
   }
 
   const value = parseFloat(rawValue);
@@ -36,54 +36,29 @@ export async function saveMetric(formData: FormData) {
     throw new Error("Value must be a valid number");
   }
 
-  const def = METRIC_DEFINITIONS[slug];
+  const def = METRIC_DEFINITIONS[metricKey];
   if (!def) {
-    throw new Error(`Unknown metric slug: ${slug}`);
+    throw new Error(`Unknown metric key: ${metricKey}`);
   }
-
-  const categoryMap: Record<string, MetricCategory> = {
-    mrr: "growth",
-    arr: "growth",
-    mrr_growth_rate: "growth",
-    net_dollar_retention: "retention",
-    gross_revenue_retention: "retention",
-    logo_churn_rate: "retention",
-    revenue_churn_rate: "retention",
-    cac: "sales",
-    ltv: "sales",
-    ltv_cac_ratio: "sales",
-    payback_period_months: "sales",
-    burn_multiple: "efficiency",
-    rule_of_40: "efficiency",
-    magic_number: "efficiency",
-    gross_margin_pct: "profitability",
-    monthly_burn_rate: "efficiency",
-    runway_months: "efficiency",
-  };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase.from("metrics") as any).upsert(
     {
       company_id: companyId,
-      financial_period_id: periodId,
-      name: def.label,
-      slug,
-      value,
-      unit: def.unit,
-      category: categoryMap[slug] ?? "other",
-      is_computed: false,
-      scenario_id: null,
+      period_date: periodDate,
+      metric_key: metricKey,
+      metric_value: value,
+      metric_unit: def.unit,
+      source: "manual",
     },
-    { onConflict: "company_id,financial_period_id,slug" }
+    { onConflict: "company_id,period_date,metric_key" }
   );
 
   if (error) {
     throw new Error(`Failed to save metric: ${error.message}`);
   }
 
-  revalidatePath(
-    `/dashboard/companies/${companyId}/metrics`
-  );
+  revalidatePath(`/dashboard/companies/${companyId}/metrics`);
 }
 
 // ---------------------------------------------------------------------------
@@ -92,10 +67,7 @@ export async function saveMetric(formData: FormData) {
 
 /**
  * Derives computable SaaS metrics from line items in the financial data and
- * upserts them into the metrics table for the given company and period.
- *
- * This function is designed to be called server-side after new financial data
- * is imported or updated.
+ * upserts them into the metrics table for the given company and period date.
  */
 export async function calculateAndStoreMetrics(
   companyId: string,
@@ -108,25 +80,21 @@ export async function calculateAndStoreMetrics(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Fetch the financial period matching the date
+  // Fetch the actual financial period matching the date
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: periodRaw, error: periodError } = await (supabase as any)
     .from("financial_periods")
-    .select("id, start_date, end_date, period_label")
+    .select("id, period_date")
     .eq("company_id", companyId)
-    .lte("start_date", periodDate)
-    .gte("end_date", periodDate)
-    .eq("period_type", "monthly")
-    .single();
+    .eq("period_date", periodDate)
+    .eq("period_type", "actual")
+    .maybeSingle();
 
-  const period = periodRaw as Pick<
-    import("@/lib/supabase/types").FinancialPeriodRow,
-    "id" | "start_date" | "end_date" | "period_label"
-  > | null;
+  const period = periodRaw as Pick<FinancialPeriodRow, "id" | "period_date"> | null;
 
   if (periodError || !period) {
     throw new Error(
-      `No monthly period found for ${periodDate}: ${periodError?.message ?? "not found"}`
+      `No actual period found for ${periodDate}: ${periodError?.message ?? "not found"}`
     );
   }
 
@@ -134,13 +102,10 @@ export async function calculateAndStoreMetrics(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: accountsRaw } = await (supabase as any)
     .from("accounts")
-    .select("id, category, account_type")
+    .select("id, category, subcategory")
     .eq("company_id", companyId);
 
-  const accounts = (accountsRaw ?? []) as Pick<
-    import("@/lib/supabase/types").AccountRow,
-    "id" | "category" | "account_type"
-  >[];
+  const accounts = (accountsRaw ?? []) as Pick<AccountRow, "id" | "category" | "subcategory">[];
 
   if (accounts.length === 0) return;
 
@@ -150,16 +115,10 @@ export async function calculateAndStoreMetrics(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: lineItemsRaw } = await (supabase as any)
     .from("line_items")
-    .select("account_id, amount, line_item_type")
-    .eq("company_id", companyId)
-    .eq("financial_period_id", period.id)
-    .eq("line_item_type", "actual")
-    .is("scenario_id", null);
+    .select("account_id, amount")
+    .eq("period_id", period.id);
 
-  const lineItems = (lineItemsRaw ?? []) as Pick<
-    import("@/lib/supabase/types").LineItemRow,
-    "account_id" | "amount" | "line_item_type"
-  >[];
+  const lineItems = (lineItemsRaw ?? []) as Pick<LineItemRow, "account_id" | "amount">[];
 
   if (lineItems.length === 0) return;
 
@@ -172,11 +131,11 @@ export async function calculateAndStoreMetrics(
     const account = accountMap.get(item.account_id);
     if (!account) continue;
 
-    if (account.account_type === "revenue") {
+    if (account.category === "revenue") {
       revenueTotal += item.amount;
-    } else if (account.account_type === "cogs") {
+    } else if (account.category === "cogs") {
       cogsTotal += item.amount;
-    } else if (account.category === "sales_marketing") {
+    } else if (account.subcategory === "sales_marketing") {
       salesMarketingTotal += item.amount;
     }
   }
@@ -189,34 +148,34 @@ export async function calculateAndStoreMetrics(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: storedMetricsRaw } = await (supabase as any)
     .from("metrics")
-    .select("slug, value")
+    .select("metric_key, metric_value")
     .eq("company_id", companyId)
-    .eq("financial_period_id", period.id)
-    .is("scenario_id", null);
+    .eq("period_date", periodDate);
 
-  const storedMetrics = (storedMetricsRaw ?? []) as Pick<
-    import("@/lib/supabase/types").MetricRow,
-    "slug" | "value"
-  >[];
+  const storedMetrics = (storedMetricsRaw ?? []) as Pick<MetricRow, "metric_key" | "metric_value">[];
 
-  const mrrMetric = storedMetrics.find((m) => m.slug === "mrr");
-  const mrr = mrrMetric?.value ?? null;
+  const mrrMetric = storedMetrics.find((m) => m.metric_key === "mrr");
+  const mrr = mrrMetric?.metric_value ?? null;
 
   const computedMetrics: Array<{
-    slug: string;
-    value: number;
-    category: MetricCategory;
+    metric_key: string;
+    metric_value: number;
+    metric_unit: string | null;
   }> = [];
 
   if (mrr !== null) {
-    computedMetrics.push({ slug: "arr", value: mrr * 12, category: "growth" });
+    computedMetrics.push({
+      metric_key: "arr",
+      metric_value: mrr * 12,
+      metric_unit: METRIC_DEFINITIONS["arr"]?.unit ?? null,
+    });
   }
 
   if (grossMarginPct !== null) {
     computedMetrics.push({
-      slug: "gross_margin_pct",
-      value: grossMarginPct,
-      category: "profitability",
+      metric_key: "gross_margin_pct",
+      metric_value: grossMarginPct,
+      metric_unit: METRIC_DEFINITIONS["gross_margin_pct"]?.unit ?? null,
     });
   }
 
@@ -224,33 +183,27 @@ export async function calculateAndStoreMetrics(
   if (revenueTotal > 0 || cogsTotal > 0 || salesMarketingTotal > 0) {
     const burnRate = Math.max(0, cogsTotal + salesMarketingTotal - revenueTotal);
     computedMetrics.push({
-      slug: "monthly_burn_rate",
-      value: burnRate,
-      category: "efficiency",
+      metric_key: "monthly_burn_rate",
+      metric_value: burnRate,
+      metric_unit: METRIC_DEFINITIONS["monthly_burn_rate"]?.unit ?? null,
     });
   }
 
   if (computedMetrics.length === 0) return;
 
-  const upsertRows = computedMetrics.map(({ slug, value, category }) => {
-    const def = METRIC_DEFINITIONS[slug];
-    return {
-      company_id: companyId,
-      financial_period_id: period.id,
-      name: def?.label ?? slug,
-      slug,
-      value,
-      unit: def?.unit ?? null,
-      category,
-      is_computed: true,
-      scenario_id: null,
-    };
-  });
+  const upsertRows = computedMetrics.map(({ metric_key, metric_value, metric_unit }) => ({
+    company_id: companyId,
+    period_date: periodDate,
+    metric_key,
+    metric_value,
+    metric_unit,
+    source: "computed",
+  }));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: upsertError } = await (supabase as any)
     .from("metrics")
-    .upsert(upsertRows, { onConflict: "company_id,financial_period_id,slug" });
+    .upsert(upsertRows, { onConflict: "company_id,period_date,metric_key" });
 
   if (upsertError) {
     throw new Error(`Failed to store computed metrics: ${upsertError.message}`);

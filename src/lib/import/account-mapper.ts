@@ -80,14 +80,14 @@ export function autoMapAccounts(
     const candidates: MappingCandidate[] = accounts
       .map((account) => {
         const nameConf = getMatchConfidence(importName, account.name);
-        const codeConf = account.code
-          ? getMatchConfidence(importName, account.code)
+        const numberConf = account.account_number
+          ? getMatchConfidence(importName, account.account_number)
           : 0;
 
-        const confidence = Math.max(nameConf, codeConf);
+        const confidence = Math.max(nameConf, numberConf);
         const matchReason =
-          codeConf > nameConf
-            ? `Code match (${Math.round(codeConf * 100)}%)`
+          numberConf > nameConf
+            ? `Number match (${Math.round(numberConf * 100)}%)`
             : `Name match (${Math.round(nameConf * 100)}%)`;
 
         return { account, confidence, matchReason };

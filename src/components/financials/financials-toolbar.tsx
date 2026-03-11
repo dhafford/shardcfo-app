@@ -36,10 +36,10 @@ function buildCSV(
   }
 
   const header = [
-    "Account Code",
+    "Account Number",
     "Account Name",
-    "Type",
-    ...periods.map((p) => p.period_label),
+    "Category",
+    ...periods.map((p) => p.period_date),
   ].join(",");
 
   const rows = accounts
@@ -50,9 +50,9 @@ function buildCSV(
         return dp ? String(dp.actual) : "0";
       });
       return [
-        acc.code ?? "",
+        acc.account_number,
         `"${acc.name.replace(/"/g, '""')}"`,
-        acc.account_type,
+        acc.category,
         ...values,
       ].join(",");
     });

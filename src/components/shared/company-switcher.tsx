@@ -25,7 +25,7 @@ const statusBadgeVariant: Record<
   "default" | "secondary" | "outline" | "destructive"
 > = {
   active: "default",
-  inactive: "secondary",
+  onboarding: "secondary",
   archived: "outline",
 }
 

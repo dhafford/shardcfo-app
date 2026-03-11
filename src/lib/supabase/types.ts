@@ -10,8 +10,8 @@ export type Json =
 // Enum types matching CHECK constraints / Postgres enums in the schema
 // -------------------------------------------------------------------
 
-export type UserRole = 'admin' | 'analyst' | 'viewer'
-export type CompanyStatus = 'active' | 'inactive' | 'archived'
+export type UserRole = 'cfo' | 'admin' | 'viewer'
+export type CompanyStatus = 'active' | 'archived' | 'onboarding'
 export type PeriodType = 'monthly' | 'quarterly' | 'annual'
 export type AccountType = 'revenue' | 'cogs' | 'opex' | 'asset' | 'liability' | 'equity' | 'other'
 export type AccountCategory =
@@ -46,28 +46,27 @@ export type AuditAction = 'insert' | 'update' | 'delete' | 'login' | 'logout' | 
 
 export interface ProfileRow {
   id: string
-  user_id: string
-  company_id: string | null
-  full_name: string | null
+  full_name: string
+  email: string
   avatar_url: string | null
   role: UserRole
-  is_active: boolean
-  last_login_at: string | null
+  firm_name: string | null
   created_at: string
   updated_at: string
 }
 
 export interface CompanyRow {
   id: string
+  owner_id: string
   name: string
-  slug: string
-  logo_url: string | null
+  legal_entity: string | null
   industry: string | null
-  founded_year: number | null
+  stage: string | null
   fiscal_year_end_month: number
   currency: string
+  logo_url: string | null
   status: CompanyStatus
-  settings: Json
+  metadata: Json | null
   created_at: string
   updated_at: string
 }
@@ -75,13 +74,9 @@ export interface CompanyRow {
 export interface FinancialPeriodRow {
   id: string
   company_id: string
-  period_type: PeriodType
-  period_label: string
-  start_date: string
-  end_date: string
-  is_locked: boolean
-  locked_by: string | null
-  locked_at: string | null
+  period_date: string
+  period_type: string
+  status: string
   created_at: string
   updated_at: string
 }
@@ -89,29 +84,21 @@ export interface FinancialPeriodRow {
 export interface AccountRow {
   id: string
   company_id: string
-  code: string | null
+  account_number: string
   name: string
-  account_type: AccountType
-  category: AccountCategory | null
-  parent_account_id: string | null
-  display_order: number
+  category: string
+  subcategory: string | null
   is_active: boolean
-  description: string | null
+  display_order: number
   created_at: string
-  updated_at: string
 }
 
 export interface LineItemRow {
   id: string
-  company_id: string
-  financial_period_id: string
+  period_id: string
   account_id: string
-  scenario_id: string | null
-  line_item_type: LineItemType
   amount: number
   notes: string | null
-  source: string | null
-  imported_by: string | null
   created_at: string
   updated_at: string
 }
@@ -119,31 +106,26 @@ export interface LineItemRow {
 export interface MetricRow {
   id: string
   company_id: string
-  financial_period_id: string
-  scenario_id: string | null
-  name: string
-  slug: string
-  value: number
-  unit: string | null
-  category: MetricCategory
-  is_computed: boolean
-  formula: string | null
-  metadata: Json
+  period_date: string
+  metric_key: string
+  metric_value: number
+  metric_unit: string | null
+  source: string | null
   created_at: string
-  updated_at: string
 }
 
 export interface BoardDeckRow {
   id: string
   company_id: string
   title: string
-  description: string | null
-  period_ids: string[]
-  status: DeckStatus
-  template_id: string | null
-  content: Json
-  published_url: string | null
-  created_by: string
+  period_start: string
+  period_end: string
+  status: string
+  template_key: string
+  sections: Json
+  generated_pdf_url: string | null
+  generated_pptx_url: string | null
+  presenter_notes: Json
   created_at: string
   updated_at: string
 }
@@ -151,20 +133,15 @@ export interface BoardDeckRow {
 export interface DataImportRow {
   id: string
   company_id: string
-  imported_by: string
-  source: ImportSource
-  file_name: string | null
-  file_url: string | null
-  status: ImportStatus
-  rows_total: number | null
-  rows_imported: number | null
-  rows_failed: number | null
-  error_log: Json
+  file_name: string
+  file_url: string
+  file_type: string
+  status: string
+  row_count: number | null
   mapping_config: Json
-  financial_period_id: string | null
-  started_at: string | null
-  completed_at: string | null
+  error_log: Json
   created_at: string
+  updated_at: string
 }
 
 export interface ScenarioRow {
@@ -172,26 +149,22 @@ export interface ScenarioRow {
   company_id: string
   name: string
   description: string | null
-  scenario_type: ScenarioType
-  base_scenario_id: string | null
-  is_active: boolean
+  base_period_date: string
   assumptions: Json
-  created_by: string
+  results_cache: Json
+  is_active: boolean
   created_at: string
   updated_at: string
 }
 
 export interface AuditLogRow {
   id: string
-  company_id: string | null
   user_id: string | null
-  action: AuditAction
-  table_name: string | null
-  record_id: string | null
-  old_values: Json
-  new_values: Json
-  ip_address: string | null
-  user_agent: string | null
+  company_id: string | null
+  action: string
+  entity_type: string
+  entity_id: string | null
+  details: Json
   created_at: string
 }
 
@@ -200,14 +173,12 @@ export interface AuditLogRow {
 // -------------------------------------------------------------------
 
 export interface ProfileInsert {
-  id?: string
-  user_id: string
-  company_id?: string | null
-  full_name?: string | null
+  id: string
+  full_name: string
+  email: string
   avatar_url?: string | null
   role?: UserRole
-  is_active?: boolean
-  last_login_at?: string | null
+  firm_name?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -215,14 +186,15 @@ export interface ProfileInsert {
 export interface CompanyInsert {
   id?: string
   name: string
-  slug: string
-  logo_url?: string | null
+  owner_id: string
+  legal_entity?: string | null
   industry?: string | null
-  founded_year?: number | null
+  stage?: string | null
   fiscal_year_end_month?: number
   currency?: string
+  logo_url?: string | null
   status?: CompanyStatus
-  settings?: Json
+  metadata?: Json | null
   created_at?: string
   updated_at?: string
 }
@@ -230,13 +202,9 @@ export interface CompanyInsert {
 export interface FinancialPeriodInsert {
   id?: string
   company_id: string
-  period_type: PeriodType
-  period_label: string
-  start_date: string
-  end_date: string
-  is_locked?: boolean
-  locked_by?: string | null
-  locked_at?: string | null
+  period_date: string
+  period_type?: string
+  status?: string
   created_at?: string
   updated_at?: string
 }
@@ -244,29 +212,21 @@ export interface FinancialPeriodInsert {
 export interface AccountInsert {
   id?: string
   company_id: string
-  code?: string | null
+  account_number: string
   name: string
-  account_type: AccountType
-  category?: AccountCategory | null
-  parent_account_id?: string | null
-  display_order?: number
+  category: string
+  subcategory?: string | null
   is_active?: boolean
-  description?: string | null
+  display_order?: number
   created_at?: string
-  updated_at?: string
 }
 
 export interface LineItemInsert {
   id?: string
-  company_id: string
-  financial_period_id: string
+  period_id: string
   account_id: string
-  scenario_id?: string | null
-  line_item_type?: LineItemType
   amount: number
   notes?: string | null
-  source?: string | null
-  imported_by?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -274,31 +234,26 @@ export interface LineItemInsert {
 export interface MetricInsert {
   id?: string
   company_id: string
-  financial_period_id: string
-  scenario_id?: string | null
-  name: string
-  slug: string
-  value: number
-  unit?: string | null
-  category?: MetricCategory
-  is_computed?: boolean
-  formula?: string | null
-  metadata?: Json
+  period_date: string
+  metric_key: string
+  metric_value: number
+  metric_unit?: string | null
+  source?: string | null
   created_at?: string
-  updated_at?: string
 }
 
 export interface BoardDeckInsert {
   id?: string
   company_id: string
   title: string
-  description?: string | null
-  period_ids?: string[]
-  status?: DeckStatus
-  template_id?: string | null
-  content?: Json
-  published_url?: string | null
-  created_by: string
+  period_start: string
+  period_end: string
+  status?: string
+  template_key?: string
+  sections?: Json
+  generated_pdf_url?: string | null
+  generated_pptx_url?: string | null
+  presenter_notes?: Json
   created_at?: string
   updated_at?: string
 }
@@ -306,20 +261,15 @@ export interface BoardDeckInsert {
 export interface DataImportInsert {
   id?: string
   company_id: string
-  imported_by: string
-  source: ImportSource
-  file_name?: string | null
-  file_url?: string | null
-  status?: ImportStatus
-  rows_total?: number | null
-  rows_imported?: number | null
-  rows_failed?: number | null
-  error_log?: Json
+  file_name: string
+  file_url: string
+  file_type: string
+  status?: string
+  row_count?: number | null
   mapping_config?: Json
-  financial_period_id?: string | null
-  started_at?: string | null
-  completed_at?: string | null
+  error_log?: Json
   created_at?: string
+  updated_at?: string
 }
 
 export interface ScenarioInsert {
@@ -327,26 +277,22 @@ export interface ScenarioInsert {
   company_id: string
   name: string
   description?: string | null
-  scenario_type?: ScenarioType
-  base_scenario_id?: string | null
-  is_active?: boolean
+  base_period_date: string
   assumptions?: Json
-  created_by: string
+  results_cache?: Json
+  is_active?: boolean
   created_at?: string
   updated_at?: string
 }
 
 export interface AuditLogInsert {
   id?: string
-  company_id?: string | null
   user_id?: string | null
-  action: AuditAction
-  table_name?: string | null
-  record_id?: string | null
-  old_values?: Json
-  new_values?: Json
-  ip_address?: string | null
-  user_agent?: string | null
+  company_id?: string | null
+  action: string
+  entity_type: string
+  entity_id?: string | null
+  details?: Json
   created_at?: string
 }
 
@@ -354,7 +300,7 @@ export interface AuditLogInsert {
 // Update types — all fields optional for PATCH-style updates
 // -------------------------------------------------------------------
 
-export type ProfileUpdate = Partial<Omit<ProfileInsert, 'user_id'>>
+export type ProfileUpdate = Partial<Omit<ProfileInsert, 'id'>>
 export type CompanyUpdate = Partial<CompanyInsert>
 export type FinancialPeriodUpdate = Partial<FinancialPeriodInsert>
 export type AccountUpdate = Partial<AccountInsert>
@@ -376,65 +322,16 @@ export interface Database {
         Row: ProfileRow
         Insert: ProfileInsert
         Update: ProfileUpdate
-        Relationships: [
-          {
-            foreignKeyName: 'profiles_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: true
-            referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'profiles_company_id_fkey'
-            columns: ['company_id']
-            isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
-          },
-        ]
+        Relationships: []
       }
       companies: {
         Row: CompanyRow
         Insert: CompanyInsert
         Update: CompanyUpdate
-        Relationships: []
-      }
-      financial_periods: {
-        Row: FinancialPeriodRow
-        Insert: FinancialPeriodInsert
-        Update: FinancialPeriodUpdate
         Relationships: [
           {
-            foreignKeyName: 'financial_periods_company_id_fkey'
-            columns: ['company_id']
-            isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'financial_periods_locked_by_fkey'
-            columns: ['locked_by']
-            isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['user_id']
-          },
-        ]
-      }
-      accounts: {
-        Row: AccountRow
-        Insert: AccountInsert
-        Update: AccountUpdate
-        Relationships: [
-          {
-            foreignKeyName: 'accounts_company_id_fkey'
-            columns: ['company_id']
-            isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'accounts_parent_account_id_fkey'
-            columns: ['parent_account_id']
+            foreignKeyName: 'companies_owner_id_fkey'
+            columns: ['owner_id']
             isOneToOne: false
             referencedRelation: 'accounts'
             referencedColumns: ['id']
@@ -445,169 +342,37 @@ export interface Database {
         Row: LineItemRow
         Insert: LineItemInsert
         Update: LineItemUpdate
-        Relationships: [
-          {
-            foreignKeyName: 'line_items_company_id_fkey'
-            columns: ['company_id']
-            isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'line_items_financial_period_id_fkey'
-            columns: ['financial_period_id']
-            isOneToOne: false
-            referencedRelation: 'financial_periods'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'line_items_account_id_fkey'
-            columns: ['account_id']
-            isOneToOne: false
-            referencedRelation: 'accounts'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'line_items_scenario_id_fkey'
-            columns: ['scenario_id']
-            isOneToOne: false
-            referencedRelation: 'scenarios'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'line_items_imported_by_fkey'
-            columns: ['imported_by']
-            isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['user_id']
-          },
-        ]
+        Relationships: []
       }
       metrics: {
         Row: MetricRow
         Insert: MetricInsert
         Update: MetricUpdate
-        Relationships: [
-          {
-            foreignKeyName: 'metrics_company_id_fkey'
-            columns: ['company_id']
-            isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'metrics_financial_period_id_fkey'
-            columns: ['financial_period_id']
-            isOneToOne: false
-            referencedRelation: 'financial_periods'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'metrics_scenario_id_fkey'
-            columns: ['scenario_id']
-            isOneToOne: false
-            referencedRelation: 'scenarios'
-            referencedColumns: ['id']
-          },
-        ]
+        Relationships: []
       }
       board_decks: {
         Row: BoardDeckRow
         Insert: BoardDeckInsert
         Update: BoardDeckUpdate
-        Relationships: [
-          {
-            foreignKeyName: 'board_decks_company_id_fkey'
-            columns: ['company_id']
-            isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'board_decks_created_by_fkey'
-            columns: ['created_by']
-            isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['user_id']
-          },
-        ]
+        Relationships: []
       }
       data_imports: {
         Row: DataImportRow
         Insert: DataImportInsert
         Update: DataImportUpdate
-        Relationships: [
-          {
-            foreignKeyName: 'data_imports_company_id_fkey'
-            columns: ['company_id']
-            isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'data_imports_imported_by_fkey'
-            columns: ['imported_by']
-            isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['user_id']
-          },
-          {
-            foreignKeyName: 'data_imports_financial_period_id_fkey'
-            columns: ['financial_period_id']
-            isOneToOne: false
-            referencedRelation: 'financial_periods'
-            referencedColumns: ['id']
-          },
-        ]
+        Relationships: []
       }
       scenarios: {
         Row: ScenarioRow
         Insert: ScenarioInsert
         Update: ScenarioUpdate
-        Relationships: [
-          {
-            foreignKeyName: 'scenarios_company_id_fkey'
-            columns: ['company_id']
-            isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'scenarios_base_scenario_id_fkey'
-            columns: ['base_scenario_id']
-            isOneToOne: false
-            referencedRelation: 'scenarios'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'scenarios_created_by_fkey'
-            columns: ['created_by']
-            isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['user_id']
-          },
-        ]
+        Relationships: []
       }
       audit_log: {
         Row: AuditLogRow
         Insert: AuditLogInsert
         Update: never
-        Relationships: [
-          {
-            foreignKeyName: 'audit_log_company_id_fkey'
-            columns: ['company_id']
-            isOneToOne: false
-            referencedRelation: 'companies'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'audit_log_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'profiles'
-            referencedColumns: ['user_id']
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
@@ -617,18 +382,7 @@ export interface Database {
       [_ in never]: never
     }
     Enums: {
-      user_role: UserRole
-      company_status: CompanyStatus
-      period_type: PeriodType
-      account_type: AccountType
-      account_category: AccountCategory
-      line_item_type: LineItemType
-      metric_category: MetricCategory
-      deck_status: DeckStatus
-      import_status: ImportStatus
-      import_source: ImportSource
-      scenario_type: ScenarioType
-      audit_action: AuditAction
+      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never

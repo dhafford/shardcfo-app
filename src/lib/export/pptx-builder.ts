@@ -664,9 +664,13 @@ export function buildBoardDeckPptx(
   pptx.company = company.name
   pptx.title = deck.title
 
-  // Parse sections from deck content
-  const content = (deck.content as Record<string, unknown>) ?? {}
-  const rawSections = Array.isArray(content.sections) ? content.sections : []
+  // Parse sections from deck.sections (JSONB array or object with sections array)
+  const sectionsJson = deck.sections
+  const rawSections = Array.isArray(sectionsJson)
+    ? sectionsJson
+    : Array.isArray((sectionsJson as Record<string, unknown>)?.sections)
+      ? (sectionsJson as Record<string, unknown>).sections as unknown[]
+      : []
 
   const sections: DeckSection[] = rawSections
     .map((s, i) => {

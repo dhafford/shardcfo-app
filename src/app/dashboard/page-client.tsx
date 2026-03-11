@@ -49,9 +49,11 @@ function statusColor(status: CompanyRow["status"]): string {
   switch (status) {
     case "active":
       return "bg-green-500";
-    case "inactive":
+    case "onboarding":
       return "bg-amber-500";
     case "archived":
+      return "bg-slate-400";
+    default:
       return "bg-slate-400";
   }
 }

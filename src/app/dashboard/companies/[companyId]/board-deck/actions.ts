@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DECK_TEMPLATES } from "@/lib/constants"
-import type { BoardDeckInsert, DeckStatus, Json } from "@/lib/supabase/types"
+import type { Json } from "@/lib/supabase/types"
 import type { DeckSection } from "@/components/board-deck/deck-editor"
 
 export async function createDeck(formData: FormData) {
@@ -35,14 +35,15 @@ export async function createDeck(formData: FormData) {
       }))
     : []
 
-  const deckInsert: BoardDeckInsert = {
+  const now = new Date().toISOString().split("T")[0]
+  const deckInsert = {
     company_id: companyId,
     title,
-    description: description || null,
-    template_id: templateId,
-    status: "draft" as DeckStatus,
-    content: { sections } as unknown as Json,
-    created_by: user.id,
+    period_start: now,
+    period_end: now,
+    template_key: templateId,
+    status: "draft",
+    sections: sections as unknown as Json,
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

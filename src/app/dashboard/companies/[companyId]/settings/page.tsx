@@ -88,12 +88,12 @@ export default async function CompanySettingsPage({ params }: PageProps) {
 
   if (!company) notFound();
 
-  // Determine if the current user is an admin
+  // Determine if the current user is an admin (profiles.id = auth user UUID)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profileRaw } = await (supabase as any)
     .from("profiles")
     .select("role")
-    .eq("user_id", user.id)
+    .eq("id", user.id)
     .single();
 
   const profile = profileRaw as Pick<import("@/lib/supabase/types").ProfileRow, "role"> | null;
@@ -101,9 +101,11 @@ export default async function CompanySettingsPage({ params }: PageProps) {
   const isAdmin = profile?.role === "admin";
   const isArchived = company.status === "archived";
 
-  const settings = (company.settings as Record<string, unknown>) ?? {};
-  const fundingStage = (settings.funding_stage as string) ?? "";
-  const legalEntity = (settings.legal_entity as string) ?? "";
+  // Funding stage is stored in company.metadata JSON
+  const metadata = (company.metadata as Record<string, unknown>) ?? {};
+  const fundingStage = (metadata.funding_stage as string) ?? "";
+  // legal_entity is a direct column on companies
+  const legalEntity = company.legal_entity ?? "";
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-8">
@@ -225,7 +227,7 @@ export default async function CompanySettingsPage({ params }: PageProps) {
                   type="number"
                   min={1900}
                   max={new Date().getFullYear() + 1}
-                  defaultValue={company.founded_year ?? ""}
+                  defaultValue={(metadata.founded_year as string) ?? ""}
                   placeholder="e.g. 2020"
                 />
               </div>
@@ -239,7 +241,6 @@ export default async function CompanySettingsPage({ params }: PageProps) {
                 <Badge variant="outline" className="text-[10px]">
                   {company.status}
                 </Badge>
-                <span>Slug: {company.slug}</span>
               </div>
             </div>
           </form>

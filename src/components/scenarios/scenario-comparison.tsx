@@ -20,7 +20,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { runScenarioProjection } from "@/app/(dashboard)/companies/[companyId]/scenarios/actions";
+import { runScenarioProjection } from "@/app/dashboard/companies/[companyId]/scenarios/actions";
 import type { ScenarioRow } from "@/lib/supabase/types";
 import type { ScenarioProjection } from "@/lib/calculations/scenario-engine";
 
@@ -228,7 +228,7 @@ export function ScenarioComparison({
             <div className="w-3 h-3 rounded-full bg-blue-500" />
             <span className="text-sm font-medium">{scenarioA.name}</span>
             <Badge className="text-[10px]" variant="outline">
-              {scenarioA.scenario_type}
+              {scenarioA.is_active ? "active" : "inactive"}
             </Badge>
           </div>
           <span className="text-muted-foreground text-sm">vs.</span>
@@ -236,7 +236,7 @@ export function ScenarioComparison({
             <div className="w-3 h-3 rounded-full bg-purple-500" />
             <span className="text-sm font-medium">{scenarioB.name}</span>
             <Badge className="text-[10px]" variant="outline">
-              {scenarioB.scenario_type}
+              {scenarioB.is_active ? "active" : "inactive"}
             </Badge>
           </div>
         </div>

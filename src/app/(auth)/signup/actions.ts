@@ -17,7 +17,7 @@ export async function signup(formData: FormData) {
       data: {
         full_name: fullName,
       },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "https://shardcfowebapp.vercel.app"}/callback`,
     },
   });
 

@@ -80,25 +80,25 @@ export default async function MetricsPage({ params, searchParams }: PageProps) {
 
   if (!company) notFound();
 
-  // Determine funding stage from settings JSON
-  const settings = company.settings as Record<string, unknown> | null;
+  // Determine funding stage from company metadata JSON
+  const metadata = company.metadata as Record<string, unknown> | null;
   const fundingStage: FundingStage =
-    (settings?.funding_stage as FundingStage) ?? "series_a";
+    (metadata?.funding_stage as FundingStage) ?? "series_a";
   const stageBenchmarks = SAAS_BENCHMARKS[fundingStage];
 
-  // Fetch financial periods (monthly) for the period selector and dropdowns
+  // Fetch financial periods (actual) for the period selector and dropdowns
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: periodsRaw } = await (supabase as any)
     .from("financial_periods")
-    .select("id, period_label, start_date, end_date, period_type")
+    .select("id, period_date, period_type")
     .eq("company_id", companyId)
-    .eq("period_type", "monthly")
-    .order("start_date", { ascending: false })
+    .eq("period_type", "actual")
+    .order("period_date", { ascending: false })
     .limit(24);
 
   const periodsData = (periodsRaw ?? []) as import("@/lib/supabase/types").FinancialPeriodRow[];
   const currentPeriod = periodsData[0] ?? null;
-  const currentPeriodId = currentPeriod?.id ?? "";
+  const currentPeriodDate = currentPeriod?.period_date ?? "";
 
   // Fetch all metrics for this company (last 24 months)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -106,17 +106,16 @@ export default async function MetricsPage({ params, searchParams }: PageProps) {
     .from("metrics")
     .select("*")
     .eq("company_id", companyId)
-    .is("scenario_id", null)
     .order("created_at", { ascending: true });
 
   const metricsData = (metricsRaw ?? []) as MetricRow[];
 
-  // Group metrics by slug
-  const metricsBySlug = new Map<string, MetricRow[]>();
+  // Group metrics by metric_key
+  const metricsByKey = new Map<string, MetricRow[]>();
   for (const m of metricsData) {
-    const existing = metricsBySlug.get(m.slug) ?? [];
+    const existing = metricsByKey.get(m.metric_key) ?? [];
     existing.push(m);
-    metricsBySlug.set(m.slug, existing);
+    metricsByKey.set(m.metric_key, existing);
   }
 
   // Build display metrics per section
@@ -129,16 +128,16 @@ export default async function MetricsPage({ params, searchParams }: PageProps) {
     const def = METRIC_DEFINITIONS[slug];
     if (!def) return null;
 
-    const allValues = metricsBySlug.get(slug) ?? [];
+    const allValues = metricsByKey.get(slug) ?? [];
     const currentMetric =
-      allValues.find((m) => m.financial_period_id === currentPeriodId) ?? null;
+      allValues.find((m) => m.period_date === currentPeriodDate) ?? null;
 
     const sparklineData = allValues
       .slice()
-      .sort((a, b) => a.created_at.localeCompare(b.created_at))
-      .map((m) => m.value);
+      .sort((a, b) => a.period_date.localeCompare(b.period_date))
+      .map((m) => m.metric_value);
 
-    const currentValue = currentMetric?.value ?? null;
+    const currentValue = currentMetric?.metric_value ?? null;
     const previousValue =
       sparklineData.length >= 2
         ? sparklineData[sparklineData.length - 2]
@@ -248,7 +247,7 @@ export default async function MetricsPage({ params, searchParams }: PageProps) {
         sections={sections}
         companyId={companyId}
         periods={periodsData}
-        currentPeriodId={currentPeriodId}
+        currentPeriodId={currentPeriodDate}
         manualEntryMetrics={manualEntryMetrics}
       />
     </div>

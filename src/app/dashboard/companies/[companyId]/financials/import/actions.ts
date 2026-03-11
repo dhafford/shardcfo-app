@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import type { AccountInsert, AccountRow, DataImportRow, FinancialPeriodRow } from "@/lib/supabase/types";
+import type { AccountInsert, AccountRow, FinancialPeriodRow, LineItemInsert } from "@/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,26 +51,24 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
     if (field) reverseMap[field] = header;
   }
 
-  // Create a data_imports record to track this import
+  // Create a data_imports record to track this import (using actual schema columns)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rawImportRecord, error: importRecordError } = await (supabase as any)
     .from("data_imports")
     .insert({
       company_id: companyId,
-      imported_by: user.id,
-      source: "csv",
+      file_name: "manual_import",
+      file_url: "",
+      file_type: "csv",
       status: "processing",
-      rows_total: rows.length,
-      rows_imported: 0,
-      rows_failed: 0,
+      row_count: rows.length,
       mapping_config: mapping,
-      financial_period_id: financialPeriodId ?? null,
-      started_at: new Date().toISOString(),
+      error_log: null,
     })
     .select("id")
     .single();
 
-  const importRecord = rawImportRecord as Pick<DataImportRow, "id"> | null;
+  const importRecord = rawImportRecord as Pick<{ id: string }, "id"> | null;
 
   if (importRecordError || !importRecord) {
     return {
@@ -86,15 +84,15 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
   let imported = 0;
   let failed = 0;
 
-  // Fetch accounts for this company to resolve names/codes
+  // Fetch accounts for this company to resolve names/account numbers
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rawAccounts } = await (supabase as any)
     .from("accounts")
-    .select("id, code, name")
+    .select("id, account_number, name")
     .eq("company_id", companyId);
 
-  const accounts = (rawAccounts ?? []) as Pick<AccountRow, "id" | "code" | "name">[];
-  const accountByCode = new Map(accounts.map((a) => [a.code?.toLowerCase() ?? "", a.id]));
+  const accounts = (rawAccounts ?? []) as Pick<AccountRow, "id" | "account_number" | "name">[];
+  const accountByNumber = new Map(accounts.map((a) => [a.account_number.toLowerCase(), a.id]));
   const accountByName = new Map(accounts.map((a) => [a.name.toLowerCase(), a.id]));
 
   // Process each row
@@ -106,10 +104,10 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
       const rawCode = reverseMap["account_code"] ? row[reverseMap["account_code"]] : "";
       const rawName = reverseMap["account_name"] ? row[reverseMap["account_name"]] : "";
       const rawAmount = reverseMap["amount"] ? row[reverseMap["amount"]] : "";
-      const rawPeriodLabel = reverseMap["period_label"] ? row[reverseMap["period_label"]] : "";
+      const rawPeriodDate = reverseMap["period_date"] ? row[reverseMap["period_date"]] : "";
 
       let accountId: string | null = null;
-      if (rawCode) accountId = accountByCode.get(rawCode.toLowerCase()) ?? null;
+      if (rawCode) accountId = accountByNumber.get(rawCode.toLowerCase()) ?? null;
       if (!accountId && rawName) accountId = accountByName.get(rawName.toLowerCase()) ?? null;
 
       if (!accountId) {
@@ -127,34 +125,34 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
       }
 
       let periodId = financialPeriodId ?? null;
-      if (!periodId && rawPeriodLabel) {
+      if (!periodId && rawPeriodDate) {
+        // Look up period by period_date (the actual column name)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: rawPeriod } = await (supabase as any)
           .from("financial_periods")
           .select("id")
           .eq("company_id", companyId)
-          .eq("period_label", rawPeriodLabel)
+          .eq("period_date", rawPeriodDate)
           .maybeSingle();
         const period = rawPeriod as Pick<FinancialPeriodRow, "id"> | null;
         periodId = period?.id ?? null;
       }
 
       if (!periodId) {
-        errors.push(`Row ${rowNum}: Could not resolve financial period "${rawPeriodLabel}".`);
+        errors.push(`Row ${rowNum}: Could not resolve financial period "${rawPeriodDate}".`);
         failed++;
         continue;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: lineItemError } = await (supabase as any).from("line_items").upsert({
-        company_id: companyId,
-        financial_period_id: periodId,
+      const lineItem: LineItemInsert = {
+        period_id: periodId,
         account_id: accountId,
-        line_item_type: "actual",
         amount,
-        source: `import:${importId}`,
-        imported_by: user.id,
-      });
+        notes: `import:${importId}`,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: lineItemError } = await (supabase as any).from("line_items").upsert(lineItem);
 
       if (lineItemError) {
         errors.push(`Row ${rowNum}: ${lineItemError.message}`);
@@ -168,14 +166,11 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
     }
   }
 
-  // Update import record
+  // Update import record with final status (using actual schema columns)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("data_imports").update({
-    status: failed === rows.length ? "failed" : "completed",
-    rows_imported: imported,
-    rows_failed: failed,
+    status: failed === rows.length ? "failed" : "imported",
     error_log: errors.slice(0, 100),
-    completed_at: new Date().toISOString(),
   }).eq("id", importId);
 
   revalidatePath(`/dashboard/companies/${companyId}/financials`);
@@ -195,7 +190,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
 
 export async function createAccounts(
   companyId: string,
-  newAccounts: Array<{ code?: string; name: string; account_type: string }>
+  newAccounts: Array<{ account_number?: string; name: string; category: string }>
 ): Promise<{ created: number; errors: string[] }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -212,12 +207,16 @@ export async function createAccounts(
       errors.push("Account name is required.");
       continue;
     }
+    if (!acc.account_number?.trim()) {
+      errors.push(`Account number is required for "${acc.name}".`);
+      continue;
+    }
 
     const insert: AccountInsert = {
       company_id: companyId,
+      account_number: acc.account_number.trim(),
       name: acc.name.trim(),
-      account_type: acc.account_type as AccountInsert["account_type"],
-      code: acc.code?.trim() || null,
+      category: acc.category,
       is_active: true,
       display_order: 0,
     };

@@ -151,7 +151,7 @@ export function BudgetVarianceTable({
             const { dollar: varDollar, pct: varPct } = calcVariance(actual, budget);
             const { dollar: ytdVarDollar, pct: ytdVarPct } = calcVariance(ytdActual, ytdBudget);
 
-            const favorable = isFavorable(actual, budget, account.account_type);
+            const favorable = isFavorable(actual, budget, account.category);
             const absPct = varPct !== null ? Math.abs(varPct) : 0;
             const isThresholdBreached = absPct > varianceThreshold;
 
@@ -164,7 +164,7 @@ export function BudgetVarianceTable({
             return (
               <TableRow key={account.id} className={cn("hover:bg-slate-50/80", rowBg)}>
                 <TableCell className="sticky left-0 bg-inherit z-10 font-mono text-xs text-muted-foreground">
-                  {account.code ?? "—"}
+                  {account.account_number}
                 </TableCell>
                 <TableCell className="sticky left-14 bg-inherit z-10 text-sm font-medium max-w-[180px] truncate">
                   {account.name}
@@ -236,7 +236,7 @@ export function BudgetVarianceTable({
                     "text-right font-mono tabular-nums text-sm",
                     ytdVarPct === null
                       ? "text-muted-foreground"
-                      : isFavorable(ytdActual, ytdBudget, account.account_type)
+                      : isFavorable(ytdActual, ytdBudget, account.category)
                       ? "text-green-700"
                       : "text-red-600"
                   )}

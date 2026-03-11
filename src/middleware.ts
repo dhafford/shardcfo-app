@@ -4,7 +4,7 @@ import { updateSessionWithUser } from '@/lib/supabase/middleware'
 export async function middleware(request: NextRequest) {
   const { supabaseResponse, user } = await updateSessionWithUser(request)
 
-  const { pathname } = request.nextUrl
+  const { pathname, searchParams } = request.nextUrl
 
   // Protect /dashboard and all sub-routes
   const isDashboardRoute = pathname.startsWith('/dashboard')
@@ -18,9 +18,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // If an authenticated user visits auth pages, send them to the dashboard
+  // BUT allow them to stay on /login if there's an error (e.g. profile_missing)
   const isAuthRoute = pathname === '/login' || pathname === '/signup'
+  const hasError = searchParams.has('error')
 
-  if (isAuthRoute && user) {
+  if (isAuthRoute && user && !hasError) {
     const dashboardUrl = request.nextUrl.clone()
     dashboardUrl.pathname = '/dashboard'
     dashboardUrl.search = ''

@@ -37,8 +37,8 @@ async function buildPortfolioData(
     .from("metrics")
     .select("*")
     .in("company_id", companyIds)
-    .in("slug", ["mrr", "arr", "burn_rate", "runway_months"])
-    .order("created_at", { ascending: false });
+    .in("metric_key", ["mrr", "arr", "burn_rate", "runway_months"])
+    .order("period_date", { ascending: false });
 
   const metrics = (rawMetrics ?? []) as MetricRow[];
 
@@ -48,9 +48,9 @@ async function buildPortfolioData(
       metricsMap.set(m.company_id, {});
     }
     const entry = metricsMap.get(m.company_id)!;
-    // Only keep the first (most recent) value per slug per company
-    if (!(m.slug in entry)) {
-      entry[m.slug] = m.value;
+    // Only keep the first (most recent) value per metric_key per company
+    if (!(m.metric_key in entry)) {
+      entry[m.metric_key] = m.metric_value;
     }
   }
 
@@ -60,7 +60,7 @@ async function buildPortfolioData(
     const burnRate = m["burn_rate"] ?? null;
     const needsAttention =
       (runwayMonths !== null && runwayMonths < 6) ||
-      company.status === "inactive";
+      company.status === "archived";
 
     return {
       company,
@@ -138,14 +138,11 @@ export default async function PortfolioDashboardPage() {
 
   const { data: rawProfile } = await supabase
     .from("profiles")
-    .select("user_id, company_id, role")
-    .eq("user_id", user.id)
+    .select("id, role")
+    .eq("id", user.id)
     .single();
 
-  const profile = rawProfile as Pick<
-    ProfileRow,
-    "user_id" | "company_id" | "role"
-  > | null;
+  const profile = rawProfile as { id: string; role: string } | null;
 
   if (!profile) {
     redirect("/login?error=profile_missing");
@@ -153,20 +150,12 @@ export default async function PortfolioDashboardPage() {
 
   let companies: CompanyRow[] = [];
 
-  if (profile.role === "admin") {
-    const { data } = await supabase
-      .from("companies")
-      .select("*")
-      .order("name", { ascending: true });
-    companies = (data ?? []) as CompanyRow[];
-  } else if (profile.company_id) {
-    const { data } = await supabase
-      .from("companies")
-      .select("*")
-      .eq("id", profile.company_id)
-      .single();
-    if (data) companies = [data as CompanyRow];
-  }
+  const { data } = await supabase
+    .from("companies")
+    .select("*")
+    .eq("owner_id", user.id)
+    .order("name", { ascending: true });
+  companies = (data ?? []) as CompanyRow[];
 
   const summaries = await buildPortfolioData(companies, supabase);
 

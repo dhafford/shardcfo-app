@@ -18,58 +18,86 @@ interface FinancialsPageProps {
 }
 
 async function buildPnlData(
-  companyId: string,
-  periods: FinancialPeriodRow[],
+  actualPeriods: FinancialPeriodRow[],
+  budgetPeriods: FinancialPeriodRow[],
   accounts: AccountRow[]
 ): Promise<PnlDataPoint[]> {
   const supabase = await createClient();
-  if (periods.length === 0 || accounts.length === 0) return [];
+  if ((actualPeriods.length === 0 && budgetPeriods.length === 0) || accounts.length === 0) return [];
 
-  const periodIds = periods.map((p) => p.id);
+  const actualPeriodIds = actualPeriods.map((p) => p.id);
+  const budgetPeriodIds = budgetPeriods.map((p) => p.id);
+  const allPeriodIds = [...new Set([...actualPeriodIds, ...budgetPeriodIds])];
 
-  // Fetch actual line items
-  const { data: rawActuals } = await supabase
+  if (allPeriodIds.length === 0) return [];
+
+  const { data: rawLineItems } = await supabase
     .from("line_items")
-    .select("financial_period_id, account_id, amount, line_item_type")
-    .eq("company_id", companyId)
-    .in("financial_period_id", periodIds)
-    .in("line_item_type", ["actual", "budget"]);
+    .select("period_id, account_id, amount")
+    .in("period_id", allPeriodIds);
 
-  const actuals = (rawActuals ?? []) as Pick<
-    LineItemRow,
-    "financial_period_id" | "account_id" | "amount" | "line_item_type"
-  >[];
+  const lineItems = (rawLineItems ?? []) as Pick<LineItemRow, "period_id" | "account_id" | "amount">[];
 
-  // Group by period + account + type
-  type AmountMap = Map<string, Map<string, { actual: number; budget: number }>>;
-  const grouped: AmountMap = new Map();
+  const actualPeriodIdSet = new Set(actualPeriodIds);
+  const budgetPeriodIdSet = new Set(budgetPeriodIds);
 
-  for (const item of actuals) {
-    if (!grouped.has(item.financial_period_id)) {
-      grouped.set(item.financial_period_id, new Map());
+  // Map: periodId -> accountId -> { actual, budget }
+  // For actual periods, accumulate into an "actual" bucket by the period's date
+  // For budget periods, accumulate into a "budget" bucket
+  // We key by period_date to align actual vs budget for the same calendar month
+  const actualDateToPeriodId = new Map(actualPeriods.map((p) => [p.period_date, p.id]));
+  const budgetDateToPeriodId = new Map(budgetPeriods.map((p) => [p.period_date, p.id]));
+
+  // Build: periodDate -> accountId -> { actual, budget }
+  const grouped = new Map<string, Map<string, { actual: number; budget: number }>>();
+
+  // Collect all period dates
+  const allDates = new Set([
+    ...actualPeriods.map((p) => p.period_date),
+    ...budgetPeriods.map((p) => p.period_date),
+  ]);
+  for (const d of allDates) {
+    grouped.set(d, new Map());
+  }
+
+  for (const item of lineItems) {
+    // Find the period date for this period_id
+    let periodDate: string | null = null;
+    if (actualPeriodIdSet.has(item.period_id)) {
+      const period = actualPeriods.find((p) => p.id === item.period_id);
+      periodDate = period?.period_date ?? null;
+    } else if (budgetPeriodIdSet.has(item.period_id)) {
+      const period = budgetPeriods.find((p) => p.id === item.period_id);
+      periodDate = period?.period_date ?? null;
     }
-    const periodMap = grouped.get(item.financial_period_id)!;
+    if (!periodDate) continue;
+
+    const periodMap = grouped.get(periodDate)!;
     if (!periodMap.has(item.account_id)) {
       periodMap.set(item.account_id, { actual: 0, budget: 0 });
     }
     const entry = periodMap.get(item.account_id)!;
-    if (item.line_item_type === "actual") {
+    if (actualPeriodIdSet.has(item.period_id)) {
       entry.actual += item.amount;
-    } else if (item.line_item_type === "budget") {
+    } else {
       entry.budget += item.amount;
     }
   }
 
-  // Build flat array
+  // Build flat array — use actual period IDs as the canonical periodId
   const points: PnlDataPoint[] = [];
-  for (const [periodId, periodMap] of grouped.entries()) {
+  for (const [periodDate, periodMap] of grouped.entries()) {
+    const periodId =
+      actualDateToPeriodId.get(periodDate) ??
+      budgetDateToPeriodId.get(periodDate) ??
+      periodDate;
     for (const [accountId, amounts] of periodMap.entries()) {
       points.push({
         periodId,
         accountId,
         actual: amounts.actual,
         budget: amounts.budget || null,
-        priorYear: null, // Prior year requires a separate query matching month/day offset
+        priorYear: null,
       });
     }
   }
@@ -85,7 +113,7 @@ export default async function FinancialsPage({ params, searchParams }: Financial
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Fetch company (for access control; layout already fetches but we need it for export)
+  // Fetch company
   const { data: company } = await supabase
     .from("companies")
     .select("id, name, currency")
@@ -97,14 +125,25 @@ export default async function FinancialsPage({ params, searchParams }: Financial
   const startStr = format(startDate, "yyyy-MM-dd");
   const endStr = format(endDate, "yyyy-MM-dd");
 
-  // Fetch financial periods in range
-  const { data: periods } = await supabase
+  // Fetch actual periods in range (using period_date)
+  const { data: actualPeriods } = await supabase
     .from("financial_periods")
     .select("*")
     .eq("company_id", companyId)
-    .gte("start_date", startStr)
-    .lte("end_date", endStr)
-    .order("start_date", { ascending: true });
+    .eq("period_type", "actual")
+    .gte("period_date", startStr)
+    .lte("period_date", endStr)
+    .order("period_date", { ascending: true });
+
+  // Fetch budget periods in range
+  const { data: budgetPeriods } = await supabase
+    .from("financial_periods")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("period_type", "budget")
+    .gte("period_date", startStr)
+    .lte("period_date", endStr)
+    .order("period_date", { ascending: true });
 
   // Fetch all active accounts
   const { data: accounts } = await supabase
@@ -114,13 +153,21 @@ export default async function FinancialsPage({ params, searchParams }: Financial
     .eq("is_active", true)
     .order("display_order", { ascending: true });
 
-  const safePeriods: FinancialPeriodRow[] = periods ?? [];
+  const safeActualPeriods: FinancialPeriodRow[] = actualPeriods ?? [];
+  const safeBudgetPeriods: FinancialPeriodRow[] = budgetPeriods ?? [];
+  const safePeriods: FinancialPeriodRow[] = [
+    ...safeActualPeriods,
+    ...safeBudgetPeriods.filter((bp) => !safeActualPeriods.find((ap) => ap.period_date === bp.period_date)),
+  ].sort((a, b) => a.period_date.localeCompare(b.period_date));
   const safeAccounts: AccountRow[] = accounts ?? [];
 
   const view = (sp.view ?? "pnl") as "pnl" | "balance_sheet" | "cash_flow";
   const comparison = (sp.comparison ?? "none") as ComparisonMode;
 
-  const pnlData = await buildPnlData(companyId, safePeriods, safeAccounts);
+  const pnlData = await buildPnlData(safeActualPeriods, safeBudgetPeriods, safeAccounts);
+
+  const firstPeriod = safePeriods[0];
+  const lastPeriod = safePeriods[safePeriods.length - 1];
 
   return (
     <div className="flex flex-col gap-0 min-h-full">
@@ -147,8 +194,8 @@ export default async function FinancialsPage({ params, searchParams }: Financial
               <div>
                 <h2 className="text-base font-semibold">Profit &amp; Loss</h2>
                 <p className="text-sm text-muted-foreground">
-                  {safePeriods.length > 0
-                    ? `${safePeriods[0].period_label} – ${safePeriods[safePeriods.length - 1].period_label}`
+                  {safePeriods.length > 0 && firstPeriod && lastPeriod
+                    ? `${firstPeriod.period_date} – ${lastPeriod.period_date}`
                     : "No periods in selected range"}
                 </p>
               </div>

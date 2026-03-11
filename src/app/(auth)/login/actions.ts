@@ -23,10 +23,12 @@ export async function loginWithMagicLink(formData: FormData) {
 
   const email = formData.get("email") as string;
 
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://shardcfowebapp.vercel.app";
+
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+      emailRedirectTo: `${origin}/callback`,
     },
   });
 
@@ -40,10 +42,12 @@ export async function loginWithMagicLink(formData: FormData) {
 export async function loginWithGoogle() {
   const supabase = await createClient();
 
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://shardcfowebapp.vercel.app";
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+      redirectTo: `${origin}/callback`,
     },
   });
 

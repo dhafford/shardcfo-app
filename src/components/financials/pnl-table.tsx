@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ChevronRight, ChevronDown } from "lucide-react";
-import type { AccountRow, LineItemRow, FinancialPeriodRow } from "@/lib/supabase/types";
+import type { AccountRow, FinancialPeriodRow } from "@/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,18 +72,21 @@ const SECTIONS: Section[] = [
   { key: "net_income", label: "Net Income", accountTypes: [], isSubtotal: true, indent: 0 },
 ];
 
-// Map account_category to section key
+// Map account category/subcategory to section key
+// category is the top-level type: revenue, cogs, opex, asset, liability, equity, other
+// subcategory (optional) is used for opex breakdown
 const CATEGORY_TO_SECTION: Record<string, SectionKey> = {
-  arr: "revenue",
-  mrr: "revenue",
-  services: "revenue",
-  gross_profit: "gross_profit",
+  // Top-level categories
+  revenue: "revenue",
+  cogs: "cogs",
+  // opex subcategories
   sales_marketing: "sales_marketing",
   research_development: "research_development",
   general_administrative: "general_administrative",
-  ebitda: "ebitda",
-  cash: "other",
-  accounts_receivable: "other",
+  // Other
+  asset: "other",
+  liability: "other",
+  equity: "other",
   other: "other",
 };
 
@@ -152,22 +155,25 @@ export function PnlTable({
   }, [data]);
 
   // Group accounts by section
+  // category is the top-level type (revenue, cogs, opex, etc.)
+  // subcategory is used for opex breakdown (sales_marketing, research_development, etc.)
   const accountsBySection = React.useMemo(() => {
     const grouped = new Map<SectionKey, AccountRow[]>();
     for (const acc of accounts) {
       if (!acc.is_active) continue;
       let sectionKey: SectionKey | null = null;
-      if (acc.category && CATEGORY_TO_SECTION[acc.category]) {
+
+      if (acc.category === "opex" && acc.subcategory && CATEGORY_TO_SECTION[acc.subcategory]) {
+        // For opex accounts, use subcategory to determine which opex section they belong to
+        sectionKey = CATEGORY_TO_SECTION[acc.subcategory];
+      } else if (CATEGORY_TO_SECTION[acc.category]) {
         sectionKey = CATEGORY_TO_SECTION[acc.category];
-      } else if (acc.account_type === "revenue") {
-        sectionKey = "revenue";
-      } else if (acc.account_type === "cogs") {
-        sectionKey = "cogs";
-      } else if (acc.account_type === "opex") {
-        sectionKey = "general_administrative";
-      } else if (acc.account_type === "other") {
-        sectionKey = "other";
       }
+
+      if (!sectionKey && acc.category === "opex") {
+        sectionKey = "general_administrative"; // fallback for opex without subcategory
+      }
+
       if (sectionKey) {
         if (!grouped.has(sectionKey)) grouped.set(sectionKey, []);
         grouped.get(sectionKey)!.push(acc);
@@ -263,7 +269,7 @@ export function PnlTable({
             {periods.map((period) => (
               <React.Fragment key={period.id}>
                 <TableHead className="text-right text-xs uppercase tracking-wider min-w-[90px]">
-                  {period.period_label}
+                  {period.period_date}
                 </TableHead>
                 {showComparison && (
                   <>
@@ -380,7 +386,7 @@ export function PnlTable({
                   <TableRow key={acc.id} className="hover:bg-slate-50/80">
                     <TableCell className="sticky left-0 bg-white z-10 pl-10 text-sm text-muted-foreground">
                       <span className="truncate max-w-[180px] block">
-                        {acc.code ? `${acc.code} · ` : ""}{acc.name}
+                        {acc.account_number ? `${acc.account_number} · ` : ""}{acc.name}
                       </span>
                     </TableCell>
 

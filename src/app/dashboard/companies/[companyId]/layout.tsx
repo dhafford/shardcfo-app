@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { CompanySubnav } from "@/components/shared/company-subnav"
 import { Badge } from "@/components/ui/badge"
-import type { CompanyRow, CompanyStatus, ProfileRow } from "@/lib/supabase/types"
+import type { CompanyRow, CompanyStatus } from "@/lib/supabase/types"
 
 interface CompanyLayoutProps {
   children: React.ReactNode
@@ -14,8 +14,8 @@ const statusBadgeVariant: Record<
   "default" | "secondary" | "outline"
 > = {
   active: "default",
-  inactive: "secondary",
-  archived: "outline",
+  archived: "secondary",
+  onboarding: "outline",
 }
 
 export default async function CompanyLayout({
@@ -33,20 +33,7 @@ export default async function CompanyLayout({
     redirect("/login")
   }
 
-  // Fetch profile for access control
-  const { data: rawProfile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("user_id", user.id)
-    .single()
-
-  const profile = rawProfile as ProfileRow | null
-
-  if (!profile) {
-    redirect("/login?error=profile_missing")
-  }
-
-  // Fetch the specific company
+  // Fetch the specific company (RLS ensures only owner can see it)
   const { data: rawCompany } = await supabase
     .from("companies")
     .select("*")
@@ -56,11 +43,6 @@ export default async function CompanyLayout({
   const company = rawCompany as CompanyRow | null
 
   if (!company) {
-    notFound()
-  }
-
-  // Access check: non-admins can only view their own company
-  if (profile.role !== "admin" && profile.company_id !== companyId) {
     notFound()
   }
 

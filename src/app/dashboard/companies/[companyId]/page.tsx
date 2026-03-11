@@ -96,72 +96,51 @@ export default async function CompanyDashboardPage({
 
   const company = rawCompany as CompanyRow;
 
-  // Date range: trailing 12 months
-  const now = startOfMonth(new Date());
-  const periods: string[] = [];
-  for (let i = 11; i >= 0; i--) {
-    periods.push(format(subMonths(now, i), "yyyy-MM"));
-  }
-
-  // Fetch metrics for all periods
+  // Fetch metrics for the last 12 months (use metric_key, not slug)
   const { data: rawMetrics } = await supabase
     .from("metrics")
     .select("*")
     .eq("company_id", companyId)
-    .in("slug", [
+    .in("metric_key", [
       "mrr",
       "arr",
-      "burn_rate",
+      "monthly_burn_rate",
       "runway_months",
       "gross_margin_pct",
-      "ndr_pct",
+      "net_dollar_retention",
     ])
-    .order("created_at", { ascending: false });
+    .order("period_date", { ascending: false });
 
   const metrics = (rawMetrics ?? []) as MetricRow[];
 
-  // Group latest metric value per slug
+  // Group latest metric value per metric_key
   const latestMetrics = new Map<string, MetricRow>();
   for (const m of metrics) {
-    if (!latestMetrics.has(m.slug)) {
-      latestMetrics.set(m.slug, m);
+    if (!latestMetrics.has(m.metric_key)) {
+      latestMetrics.set(m.metric_key, m);
     }
-  }
-
-  // Build sparklines per metric: pair metric rows to periods
-  const metricsBySlugAndPeriod = new Map<string, Map<string, number>>();
-  for (const m of metrics) {
-    if (!metricsBySlugAndPeriod.has(m.slug)) {
-      metricsBySlugAndPeriod.set(m.slug, new Map());
-    }
-    // Use financial_period_id as a period key — we just use order for sparkline
-    metricsBySlugAndPeriod.get(m.slug)!.set(m.financial_period_id, m.value);
   }
 
   // Scalar values
-  const mrr = latestMetrics.get("mrr")?.value ?? null;
-  const arrMetric = latestMetrics.get("arr")?.value ?? null;
+  const mrr = latestMetrics.get("mrr")?.metric_value ?? null;
+  const arrMetric = latestMetrics.get("arr")?.metric_value ?? null;
   const arr: number | null = arrMetric !== null ? arrMetric : mrr !== null ? mrr * 12 : null;
-  const burnRate = latestMetrics.get("burn_rate")?.value ?? null;
-  const runwayMonths = latestMetrics.get("runway_months")?.value ?? null;
-  const grossMarginPct = latestMetrics.get("gross_margin_pct")?.value ?? null;
-  const ndrPct = latestMetrics.get("ndr_pct")?.value ?? null;
+  const burnRate = latestMetrics.get("monthly_burn_rate")?.metric_value ?? null;
+  const runwayMonths = latestMetrics.get("runway_months")?.metric_value ?? null;
+  const grossMarginPct = latestMetrics.get("gross_margin_pct")?.metric_value ?? null;
+  const ndrPct = latestMetrics.get("net_dollar_retention")?.metric_value ?? null;
 
-  // Sparkline series (most recent values ordered ascending by created_at)
-  function buildSparkline(slug: string): number[] {
-    const rows = metrics
-      .filter((m) => m.slug === slug)
-      .sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      )
+  // Sparkline series (most recent values ordered ascending by period_date)
+  function buildSparkline(key: string): number[] {
+    return metrics
+      .filter((m) => m.metric_key === key)
+      .sort((a, b) => a.period_date.localeCompare(b.period_date))
       .slice(-12)
-      .map((m) => m.value);
-    return rows;
+      .map((m) => m.metric_value);
   }
 
   const mrrSparkline = buildSparkline("mrr");
-  const burnSparkline = buildSparkline("burn_rate");
+  const burnSparkline = buildSparkline("monthly_burn_rate");
 
   // MRR trend
   const mrrTrend = computeTrend(mrrSparkline);
@@ -173,19 +152,20 @@ export default async function CompanyDashboardPage({
 
   // ─── Revenue chart data ─────────────────────────────────────────────────────
 
-  // Fetch financial periods for trailing 12 months
+  // Fetch actual financial periods for trailing 12 months
+  const now = startOfMonth(new Date());
   const twelveMonthsAgo = format(subMonths(now, 11), "yyyy-MM-dd");
   const { data: rawFinancialPeriods } = await supabase
     .from("financial_periods")
-    .select("id, period_label, start_date")
+    .select("id, period_date")
     .eq("company_id", companyId)
-    .eq("period_type", "monthly")
-    .gte("start_date", twelveMonthsAgo)
-    .order("start_date", { ascending: true });
+    .eq("period_type", "actual")
+    .gte("period_date", twelveMonthsAgo)
+    .order("period_date", { ascending: true });
 
   const financialPeriods = (rawFinancialPeriods ?? []) as Pick<
     FinancialPeriodRow,
-    "id" | "period_label" | "start_date"
+    "id" | "period_date"
   >[];
 
   // Fetch revenue line items for these periods
@@ -197,60 +177,45 @@ export default async function CompanyDashboardPage({
   if (periodIds.length > 0) {
     const { data: rawAccounts } = await supabase
       .from("accounts")
-      .select("id, account_type, category")
+      .select("id, category, subcategory")
       .eq("company_id", companyId)
       .eq("is_active", true);
 
     const accounts = (rawAccounts ?? []) as Pick<
       AccountRow,
-      "id" | "account_type" | "category"
+      "id" | "category" | "subcategory"
     >[];
 
     const revenueAccountIds = new Set(
       accounts
-        .filter((a) => a.account_type === "revenue")
-        .map((a) => a.id)
-    );
-
-    const cashAccountIds = new Set(
-      accounts
-        .filter(
-          (a) =>
-            a.category === "cash" || a.account_type === "asset"
-        )
+        .filter((a) => a.category === "revenue")
         .map((a) => a.id)
     );
 
     const opexAccountIds = new Set(
       accounts
-        .filter((a) => a.account_type === "opex" || a.account_type === "cogs")
+        .filter((a) => a.category === "opex" || a.category === "cogs")
         .map((a) => a.id)
     );
 
     const { data: rawLineItems } = await supabase
       .from("line_items")
-      .select("financial_period_id, account_id, amount, line_item_type")
-      .eq("company_id", companyId)
-      .in("financial_period_id", periodIds)
-      .eq("line_item_type", "actual");
+      .select("period_id, account_id, amount")
+      .in("period_id", periodIds);
 
     const lineItems = (rawLineItems ?? []) as Pick<
       LineItemRow,
-      "financial_period_id" | "account_id" | "amount" | "line_item_type"
+      "period_id" | "account_id" | "amount"
     >[];
 
     // Aggregate per period
     const revenueByPeriod = new Map<string, number>();
-    const cashByPeriod = new Map<string, number>();
     const opexByPeriod = new Map<string, number>();
 
     for (const item of lineItems) {
-      const pid = item.financial_period_id;
+      const pid = item.period_id;
       if (revenueAccountIds.has(item.account_id)) {
         revenueByPeriod.set(pid, (revenueByPeriod.get(pid) ?? 0) + item.amount);
-      }
-      if (cashAccountIds.has(item.account_id)) {
-        cashByPeriod.set(pid, (cashByPeriod.get(pid) ?? 0) + item.amount);
       }
       if (opexAccountIds.has(item.account_id)) {
         opexByPeriod.set(pid, (opexByPeriod.get(pid) ?? 0) + item.amount);
@@ -259,20 +224,19 @@ export default async function CompanyDashboardPage({
 
     for (const fp of financialPeriods) {
       const revenue = revenueByPeriod.get(fp.id) ?? 0;
-      const cash = cashByPeriod.get(fp.id) ?? 0;
       const opex = opexByPeriod.get(fp.id) ?? 0;
 
       revenueData.push({
-        period: fp.period_label,
+        period: fp.period_date,
         revenue,
         mrr: revenue, // same for monthly periods
       });
 
-      const burnRate = Math.max(0, opex - revenue);
+      const burn = Math.max(0, opex - revenue);
       burnData.push({
-        period: fp.period_label,
-        burnRate,
-        cashBalance: cash,
+        period: fp.period_date,
+        burnRate: burn,
+        cashBalance: 0, // cash balance not tracked in line_items for this view
       });
     }
   }
@@ -280,20 +244,21 @@ export default async function CompanyDashboardPage({
   // ─── Runway projection ──────────────────────────────────────────────────────
 
   const runwayData: RunwayDataPoint[] = [];
-  const currentCash =
-    burnData.length > 0
-      ? burnData[burnData.length - 1].cashBalance
-      : 0;
   const avgBurnRate =
     burnData.length > 0
       ? burnData.map((d) => d.burnRate).reduce((s, v) => s + v, 0) /
         burnData.length
-      : 0;
+      : (burnRate ?? 0);
+
+  // Use stored runway data if available, otherwise use latest burn rate
+  const cashForRunway = runwayMonths !== null && avgBurnRate > 0
+    ? runwayMonths * avgBurnRate
+    : 0;
 
   for (let i = 0; i < 18; i++) {
     const periodDate = addMonths(now, i);
     const label = format(periodDate, "MMM yy");
-    const projected = Math.max(0, currentCash - avgBurnRate * i);
+    const projected = Math.max(0, cashForRunway - avgBurnRate * i);
     runwayData.push({
       period: label,
       projected,
@@ -310,20 +275,18 @@ export default async function CompanyDashboardPage({
   if (periodIds.length > 0) {
     const { data: rawExpenseAccounts } = await supabase
       .from("accounts")
-      .select("id, name, category, account_type")
+      .select("id, name, category, subcategory")
       .eq("company_id", companyId);
 
     const expenseAccounts = (rawExpenseAccounts ?? []) as Pick<
       AccountRow,
-      "id" | "name" | "category" | "account_type"
+      "id" | "name" | "category" | "subcategory"
     >[];
 
     const { data: rawRecentLineItems } = await supabase
       .from("line_items")
       .select("account_id, amount")
-      .eq("company_id", companyId)
-      .in("financial_period_id", periodIds.slice(-3))
-      .eq("line_item_type", "actual");
+      .in("period_id", periodIds.slice(-3));
 
     const recentLineItems = (rawRecentLineItems ?? []) as Pick<
       LineItemRow,
@@ -338,13 +301,10 @@ export default async function CompanyDashboardPage({
     for (const item of recentLineItems) {
       const account = accountMap.get(item.account_id);
       if (!account) continue;
-      if (
-        account.account_type !== "opex" &&
-        account.account_type !== "cogs"
-      )
-        continue;
+      if (account.category !== "opex" && account.category !== "cogs") continue;
 
-      const key = account.category ?? account.account_type;
+      // Use subcategory if available, otherwise fall back to category
+      const key = account.subcategory ?? account.category;
       categoryTotals.set(key, (categoryTotals.get(key) ?? 0) + item.amount);
     }
 
@@ -375,31 +335,31 @@ export default async function CompanyDashboardPage({
 
   const { data: rawAuditRows } = await supabase
     .from("audit_log")
-    .select("id, action, table_name, created_at, new_values")
+    .select("id, action, entity_type, created_at")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false })
     .limit(10);
 
   const auditRows = (rawAuditRows ?? []) as Pick<
     AuditLogRow,
-    "id" | "action" | "table_name" | "created_at" | "new_values"
+    "id" | "action" | "entity_type" | "created_at"
   >[];
 
   function describeAuditEvent(
-    row: Pick<AuditLogRow, "action" | "table_name">
+    row: Pick<AuditLogRow, "action" | "entity_type">
   ): string {
-    const table = row.table_name ?? "record";
+    const entity = row.entity_type ?? "record";
     switch (row.action) {
       case "insert":
-        return `New ${table.replace(/_/g, " ")} created`;
+        return `New ${entity.replace(/_/g, " ")} created`;
       case "update":
-        return `${table.replace(/_/g, " ")} updated`;
+        return `${entity.replace(/_/g, " ")} updated`;
       case "delete":
-        return `${table.replace(/_/g, " ")} deleted`;
+        return `${entity.replace(/_/g, " ")} deleted`;
       case "export":
         return "Data exported";
       default:
-        return `${row.action} on ${table}`;
+        return `${row.action} on ${entity}`;
     }
   }
 

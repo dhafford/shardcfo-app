@@ -35,7 +35,7 @@ import {
   archiveAccount,
   initializeFromTemplate,
 } from "./actions";
-import type { AccountRow, AccountType } from "@/lib/supabase/types";
+import type { AccountRow } from "@/lib/supabase/types";
 import { toast } from "sonner";
 
 interface AccountsTableProps {
@@ -45,7 +45,7 @@ interface AccountsTableProps {
 
 type TemplateType = "saas" | "ecommerce" | "professional_services" | "blank";
 
-const ACCOUNT_TYPE_OPTIONS: { value: AccountType; label: string }[] = [
+const CATEGORY_OPTIONS = [
   { value: "revenue", label: "Revenue" },
   { value: "cogs", label: "COGS" },
   { value: "opex", label: "OpEx" },
@@ -55,7 +55,7 @@ const ACCOUNT_TYPE_OPTIONS: { value: AccountType; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-const TYPE_BADGE_CLASS: Record<AccountType, string> = {
+const CATEGORY_BADGE_CLASS: Record<string, string> = {
   revenue: "bg-green-100 text-green-800 border-green-200",
   cogs: "bg-orange-100 text-orange-800 border-orange-200",
   opex: "bg-blue-100 text-blue-800 border-blue-200",
@@ -67,21 +67,24 @@ const TYPE_BADGE_CLASS: Record<AccountType, string> = {
 
 interface EditState {
   accountId: string;
-  code: string;
+  account_number: string;
   name: string;
-  account_type: AccountType;
+  category: string;
+  subcategory: string;
 }
 
 interface NewAccountState {
-  code: string;
+  account_number: string;
   name: string;
-  account_type: AccountType;
+  category: string;
+  subcategory: string;
 }
 
 const BLANK_NEW_ACCOUNT: NewAccountState = {
-  code: "",
+  account_number: "",
   name: "",
-  account_type: "revenue",
+  category: "revenue",
+  subcategory: "",
 };
 
 export function AccountsTable({ companyId, accounts: initialAccounts }: AccountsTableProps) {
@@ -104,9 +107,10 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
   const startEdit = (acc: AccountRow) => {
     setEditState({
       accountId: acc.id,
-      code: acc.code ?? "",
+      account_number: acc.account_number,
       name: acc.name,
-      account_type: acc.account_type,
+      category: acc.category,
+      subcategory: acc.subcategory ?? "",
     });
   };
 
@@ -116,9 +120,10 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
     if (!editState) return;
     setSaving(true);
     const result = await updateAccount(companyId, editState.accountId, {
-      code: editState.code,
+      account_number: editState.account_number,
       name: editState.name,
-      account_type: editState.account_type,
+      category: editState.category,
+      subcategory: editState.subcategory || null,
     });
     setSaving(false);
     if (result.success) {
@@ -127,9 +132,10 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
           a.id === editState.accountId
             ? {
                 ...a,
-                code: editState.code || null,
+                account_number: editState.account_number,
                 name: editState.name,
-                account_type: editState.account_type,
+                category: editState.category,
+                subcategory: editState.subcategory || null,
               }
             : a
         )
@@ -165,24 +171,30 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
       toast.error("Account name is required.");
       return;
     }
+    if (!newAccount.account_number.trim()) {
+      toast.error("Account number is required.");
+      return;
+    }
     setSaving(true);
-    const result = await createAccount(companyId, newAccount);
+    const result = await createAccount(companyId, {
+      account_number: newAccount.account_number,
+      name: newAccount.name,
+      category: newAccount.category,
+      subcategory: newAccount.subcategory || null,
+    });
     setSaving(false);
     if (result.success && result.id) {
       const now = new Date().toISOString();
       const created: AccountRow = {
         id: result.id,
         company_id: companyId,
-        code: newAccount.code || null,
+        account_number: newAccount.account_number,
         name: newAccount.name,
-        account_type: newAccount.account_type,
-        category: null,
-        parent_account_id: null,
+        category: newAccount.category,
+        subcategory: newAccount.subcategory || null,
         display_order: 0,
         is_active: true,
-        description: null,
         created_at: now,
-        updated_at: now,
       };
       setAccounts((prev) => [...prev, created]);
       setNewAccount(BLANK_NEW_ACCOUNT);
@@ -277,9 +289,10 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50">
-              <TableHead className="w-24 text-xs uppercase tracking-wider">Code</TableHead>
+              <TableHead className="w-24 text-xs uppercase tracking-wider">Number</TableHead>
               <TableHead className="text-xs uppercase tracking-wider">Name</TableHead>
-              <TableHead className="w-28 text-xs uppercase tracking-wider">Type</TableHead>
+              <TableHead className="w-28 text-xs uppercase tracking-wider">Category</TableHead>
+              <TableHead className="w-32 text-xs uppercase tracking-wider">Subcategory</TableHead>
               <TableHead className="w-20 text-xs uppercase tracking-wider">Status</TableHead>
               <TableHead className="w-24 text-right text-xs uppercase tracking-wider">Actions</TableHead>
             </TableRow>
@@ -293,19 +306,19 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
                   <TableRow key={acc.id} className="bg-blue-50/40">
                     <TableCell>
                       <Input
-                        value={editState.code}
+                        value={editState.account_number}
                         onChange={(e) =>
-                          setEditState((prev) => prev && { ...prev, code: e.target.value })
+                          setEditState((prev) => prev ? { ...prev, account_number: e.target.value } : null)
                         }
                         className="h-7 text-sm w-20"
-                        placeholder="Code"
+                        placeholder="Number"
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         value={editState.name}
                         onChange={(e) =>
-                          setEditState((prev) => prev && { ...prev, name: e.target.value })
+                          setEditState((prev) => prev ? { ...prev, name: e.target.value } : null)
                         }
                         className="h-7 text-sm w-full max-w-[300px]"
                         placeholder="Account name"
@@ -313,24 +326,37 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
                     </TableCell>
                     <TableCell>
                       <Select
-                        value={editState.account_type}
-                        onValueChange={(v) =>
-                          setEditState(
-                            (prev) => prev && { ...prev, account_type: v as AccountType }
-                          )
-                        }
+                        value={editState.category}
+                        onValueChange={(v) => {
+                          if (!v) return;
+                          setEditState((prev) => {
+                            if (!prev) return null;
+                            const next: EditState = { ...prev, category: v };
+                            return next;
+                          });
+                        }}
                       >
                         <SelectTrigger className="h-7 text-sm w-28">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {ACCOUNT_TYPE_OPTIONS.map((o) => (
+                          {CATEGORY_OPTIONS.map((o) => (
                             <SelectItem key={o.value} value={o.value}>
                               {o.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={editState.subcategory}
+                        onChange={(e) =>
+                          setEditState((prev) => prev ? { ...prev, subcategory: e.target.value } : null)
+                        }
+                        className="h-7 text-sm w-full max-w-[150px]"
+                        placeholder="Subcategory"
+                      />
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">Active</Badge>
@@ -368,16 +394,19 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
               return (
                 <TableRow key={acc.id} className={cn(!acc.is_active && "opacity-50")}>
                   <TableCell className="font-mono text-xs text-muted-foreground">
-                    {acc.code ?? "—"}
+                    {acc.account_number}
                   </TableCell>
                   <TableCell className="text-sm font-medium">{acc.name}</TableCell>
                   <TableCell>
                     <Badge
                       variant="outline"
-                      className={cn("text-xs", TYPE_BADGE_CLASS[acc.account_type])}
+                      className={cn("text-xs", CATEGORY_BADGE_CLASS[acc.category] ?? "bg-gray-100 text-gray-700 border-gray-200")}
                     >
-                      {acc.account_type}
+                      {acc.category}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {acc.subcategory ?? "—"}
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -422,12 +451,12 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
               <TableRow className="bg-green-50/40">
                 <TableCell>
                   <Input
-                    value={newAccount.code}
+                    value={newAccount.account_number}
                     onChange={(e) =>
-                      setNewAccount((prev) => ({ ...prev, code: e.target.value }))
+                      setNewAccount((prev) => ({ ...prev, account_number: e.target.value }))
                     }
                     className="h-7 text-sm w-20"
-                    placeholder="Code"
+                    placeholder="Number *"
                     autoFocus
                   />
                 </TableCell>
@@ -443,22 +472,33 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
                 </TableCell>
                 <TableCell>
                   <Select
-                    value={newAccount.account_type}
-                    onValueChange={(v) =>
-                      setNewAccount((prev) => ({ ...prev, account_type: v as AccountType }))
-                    }
+                    value={newAccount.category}
+                    onValueChange={(v) => {
+                      if (!v) return;
+                      setNewAccount((prev) => ({ ...prev, category: v }));
+                    }}
                   >
                     <SelectTrigger className="h-7 text-sm w-28">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {ACCOUNT_TYPE_OPTIONS.map((o) => (
+                      {CATEGORY_OPTIONS.map((o) => (
                         <SelectItem key={o.value} value={o.value}>
                           {o.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </TableCell>
+                <TableCell>
+                  <Input
+                    value={newAccount.subcategory}
+                    onChange={(e) =>
+                      setNewAccount((prev) => ({ ...prev, subcategory: e.target.value }))
+                    }
+                    className="h-7 text-sm w-full max-w-[150px]"
+                    placeholder="Subcategory"
+                  />
                 </TableCell>
                 <TableCell>
                   <Badge variant="secondary" className="text-xs">New</Badge>
@@ -499,7 +539,7 @@ export function AccountsTable({ companyId, accounts: initialAccounts }: Accounts
             {accounts.length === 0 && !isAdding && (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="text-center py-8 text-sm text-muted-foreground"
                 >
                   No accounts yet. Add one manually or initialize from a template above.

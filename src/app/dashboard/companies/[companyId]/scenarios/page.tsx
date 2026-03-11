@@ -25,13 +25,6 @@ import type { ScenarioRow } from "@/lib/supabase/types";
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TYPE_BADGE: Record<ScenarioRow["scenario_type"], string> = {
-  base: "bg-slate-100 text-slate-700",
-  upside: "bg-green-100 text-green-800",
-  downside: "bg-red-100 text-red-800",
-  custom: "bg-blue-100 text-blue-800",
-};
-
 function ScenarioCard({
   scenario,
   companyId,
@@ -60,10 +53,8 @@ function ScenarioCard({
               </CardDescription>
             )}
           </div>
-          <Badge
-            className={`shrink-0 text-xs ${TYPE_BADGE[scenario.scenario_type]}`}
-          >
-            {scenario.scenario_type}
+          <Badge className="shrink-0 text-xs bg-blue-100 text-blue-800">
+            {scenario.is_active ? "active" : "inactive"}
           </Badge>
         </div>
       </CardHeader>

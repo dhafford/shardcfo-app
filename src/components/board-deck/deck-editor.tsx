@@ -13,7 +13,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { SectionLibrary } from "@/components/board-deck/section-library"
 import { SlidePreview } from "@/components/board-deck/slide-preview"
 import { SectionConfig } from "@/components/board-deck/section-config"
-import { updateDeck, addSection, removeSection, reorderSections } from "@/app/(dashboard)/companies/[companyId]/board-deck/[deckId]/actions"
+import { updateDeck, addSection, removeSection, reorderSections } from "@/app/dashboard/companies/[companyId]/board-deck/[deckId]/actions"
 import { SECTION_TYPE_DEFINITIONS } from "@/lib/constants"
 import type { BoardDeckRow, CompanyRow } from "@/lib/supabase/types"
 

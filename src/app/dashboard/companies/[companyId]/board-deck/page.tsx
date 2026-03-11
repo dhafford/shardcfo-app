@@ -30,17 +30,18 @@ import {
 import { EmptyState } from "@/components/shared/empty-state";
 import { createDeck } from "./actions";
 import { DECK_TEMPLATES } from "@/lib/constants";
-import type { BoardDeckRow, DeckStatus } from "@/lib/supabase/types";
+import type { BoardDeckRow } from "@/lib/supabase/types";
 
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const STATUS_BADGE: Record<DeckStatus, string> = {
+const STATUS_BADGE: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700",
-  published: "bg-green-100 text-green-800",
-  archived: "bg-orange-100 text-orange-800",
+  review: "bg-yellow-100 text-yellow-800",
+  final: "bg-green-100 text-green-800",
+  presented: "bg-blue-100 text-blue-800",
 };
 
 function formatDate(iso: string): string {
@@ -128,9 +129,9 @@ function DeckCard({
   companyId: string;
 }) {
   const sections = (() => {
-    const content = deck.content as Record<string, unknown> | null;
-    if (!content || !Array.isArray(content.sections)) return [];
-    return content.sections as unknown[];
+    const raw = deck.sections;
+    if (!raw || !Array.isArray(raw)) return [];
+    return raw as unknown[];
   })();
 
   return (
@@ -139,9 +140,9 @@ function DeckCard({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <CardTitle className="text-base truncate">{deck.title}</CardTitle>
-            {deck.description && (
+            {deck.title && (
               <CardDescription className="mt-0.5 line-clamp-2">
-                {deck.description}
+                {deck.period_start} — {deck.period_end}
               </CardDescription>
             )}
           </div>
@@ -153,11 +154,11 @@ function DeckCard({
 
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
-          {deck.template_id && (
+          {deck.template_key && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <FileText className="w-3.5 h-3.5 shrink-0" />
               <span className="capitalize">
-                {deck.template_id.replace(/_/g, " ")}
+                {deck.template_key.replace(/_/g, " ")}
               </span>
             </div>
           )}

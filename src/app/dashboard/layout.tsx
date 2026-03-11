@@ -19,40 +19,31 @@ export default async function DashboardLayout({
     redirect("/login")
   }
 
-  // Fetch the user's profile
+  // Fetch the user's profile (profiles.id = auth user id)
   const { data: rawProfile } = await supabase
     .from("profiles")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("id", user.id)
     .single()
 
   const profile = rawProfile as ProfileRow | null
 
   if (!profile) {
-    // Profile not yet created — send back to login with an error indicator
+    // Profile not yet created — sign out to break redirect loop, then go to login
+    await supabase.auth.signOut()
     redirect("/login?error=profile_missing")
   }
 
-  // Fetch all companies the user has access to.
-  // For admins we return all companies; for others we return only the
-  // company linked to their profile.
+  // Fetch all companies the user owns
   let companies: CompanyRow[] = []
 
-  if (profile.role === "admin") {
-    const { data } = await supabase
-      .from("companies")
-      .select("*")
-      .eq("status", "active")
-      .order("name", { ascending: true })
-    companies = (data as CompanyRow[] | null) ?? []
-  } else if (profile.company_id) {
-    const { data } = await supabase
-      .from("companies")
-      .select("*")
-      .eq("id", profile.company_id)
-      .single()
-    if (data) companies = [data as CompanyRow]
-  }
+  const { data } = await supabase
+    .from("companies")
+    .select("*")
+    .eq("owner_id", user.id)
+    .eq("status", "active")
+    .order("name", { ascending: true })
+  companies = (data as CompanyRow[] | null) ?? []
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">

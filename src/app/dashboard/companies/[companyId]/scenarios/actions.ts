@@ -10,7 +10,7 @@ import {
   type HirePlan,
   type FundraisingEvent,
 } from "@/lib/calculations/scenario-engine";
-import type { ScenarioType, Json } from "@/lib/supabase/types";
+import type { Json } from "@/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
 // createScenario
@@ -27,12 +27,14 @@ export async function createScenario(formData: FormData) {
   const companyId = formData.get("companyId") as string;
   const name = formData.get("name") as string;
   const description = (formData.get("description") as string) || null;
-  const scenarioType = (formData.get("scenarioType") as ScenarioType) || "custom";
-  const baseScenarioId = (formData.get("baseScenarioId") as string) || null;
 
   if (!companyId || !name) {
     throw new Error("companyId and name are required");
   }
+
+  // Use today's date as the base_period_date (YYYY-MM-DD)
+  const today = new Date();
+  const basePeriodDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
 
   const defaultAssumptions: ScenarioAssumptions = {
     mrrGrowthRate: 0.1,
@@ -50,11 +52,9 @@ export async function createScenario(formData: FormData) {
       company_id: companyId,
       name,
       description,
-      scenario_type: scenarioType,
-      base_scenario_id: baseScenarioId,
+      base_period_date: basePeriodDate,
       is_active: true,
       assumptions: defaultAssumptions as unknown as Json,
-      created_by: user.id,
     })
     .select("id")
     .single();
@@ -156,7 +156,6 @@ export async function deleteScenario(formData: FormData) {
 /**
  * Runs the scenario engine against base period actuals fetched from
  * the database and returns the projection result as a JSON string.
- * The caller can store or display this result client-side.
  */
 export async function runScenarioProjection(
   companyId: string,
@@ -184,51 +183,48 @@ export async function runScenarioProjection(
     throw new Error(`Scenario not found: ${scenarioError?.message ?? "unknown"}`);
   }
 
-  // Fetch the most recent financial period with actual line items
+  // Fetch the most recent actual financial period
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: latestPeriodRaw } = await (supabase as any)
     .from("financial_periods")
-    .select("id, period_label, start_date")
+    .select("id, period_date")
     .eq("company_id", companyId)
-    .eq("period_type", "monthly")
-    .order("start_date", { ascending: false })
+    .eq("period_type", "actual")
+    .order("period_date", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   const latestPeriod = latestPeriodRaw as Pick<
     import("@/lib/supabase/types").FinancialPeriodRow,
-    "id" | "period_label" | "start_date"
+    "id" | "period_date"
   > | null;
 
   if (!latestPeriod) {
-    throw new Error("No financial periods found. Import data first.");
+    throw new Error("No actual financial periods found. Import data first.");
   }
 
-  // Fetch line items for the base period
+  // Fetch line items for the base period (using period_id, the actual FK)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: lineItemsRaw } = await (supabase as any)
     .from("line_items")
     .select("account_id, amount")
-    .eq("company_id", companyId)
-    .eq("financial_period_id", latestPeriod.id)
-    .eq("line_item_type", "actual")
-    .is("scenario_id", null);
+    .eq("period_id", latestPeriod.id);
 
   const lineItems = (lineItemsRaw ?? []) as Pick<
     import("@/lib/supabase/types").LineItemRow,
     "account_id" | "amount"
   >[];
 
-  // Fetch accounts for categorization
+  // Fetch accounts for categorization (category is the top-level type now)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: accountsRaw } = await (supabase as any)
     .from("accounts")
-    .select("id, account_type, category")
+    .select("id, category, subcategory")
     .eq("company_id", companyId);
 
   const accounts = (accountsRaw ?? []) as Pick<
     import("@/lib/supabase/types").AccountRow,
-    "id" | "account_type" | "category"
+    "id" | "category" | "subcategory"
   >[];
 
   const accountMap = new Map(accounts.map((a) => [a.id, a]));
@@ -242,13 +238,13 @@ export async function runScenarioProjection(
     const account = accountMap.get(item.account_id);
     if (!account) continue;
 
-    if (account.account_type === "revenue") {
+    if (account.category === "revenue") {
       revenue += item.amount;
-    } else if (account.account_type === "cogs") {
+    } else if (account.category === "cogs") {
       cogs += item.amount;
-    } else if (account.category === "general_administrative") {
+    } else if (account.subcategory === "general_administrative") {
       payrollExpense += item.amount;
-    } else if (account.account_type === "opex") {
+    } else if (account.category === "opex") {
       otherOpex += item.amount;
     }
   }
@@ -257,22 +253,21 @@ export async function runScenarioProjection(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: metricsRaw } = await (supabase as any)
     .from("metrics")
-    .select("slug, value")
+    .select("metric_key, metric_value")
     .eq("company_id", companyId)
-    .eq("financial_period_id", latestPeriod.id)
-    .is("scenario_id", null)
-    .in("slug", ["mrr", "monthly_burn_rate", "cash_balance", "runway_months"]);
+    .eq("period_date", latestPeriod.period_date)
+    .in("metric_key", ["mrr", "monthly_burn_rate", "cash_balance", "runway_months"]);
 
   const metricsArr = (metricsRaw ?? []) as Pick<
     import("@/lib/supabase/types").MetricRow,
-    "slug" | "value"
+    "metric_key" | "metric_value"
   >[];
-  const metricMap = new Map(metricsArr.map((m) => [m.slug, m.value]));
+  const metricMap = new Map(metricsArr.map((m) => [m.metric_key, m.metric_value]));
   const mrr = metricMap.get("mrr") ?? revenue;
   const cashBalance = metricMap.get("cash_balance") ?? 0;
 
   // Format base period as YYYY-MM
-  const basePeriod = latestPeriod.start_date.substring(0, 7);
+  const basePeriod = latestPeriod.period_date.substring(0, 7);
 
   const actuals: BasePeriodActuals = {
     period: basePeriod,

@@ -318,8 +318,8 @@ function ManualEntryDialog({
 
     const fd = new FormData();
     fd.set("companyId", companyId);
-    fd.set("periodId", selectedPeriodId);
-    fd.set("slug", selectedSlug);
+    fd.set("periodDate", selectedPeriodId);
+    fd.set("metricKey", selectedSlug);
     fd.set("value", value);
 
     try {
@@ -358,8 +358,8 @@ function ManualEntryDialog({
               </SelectTrigger>
               <SelectContent>
                 {periods.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.period_label}
+                  <SelectItem key={p.id} value={p.period_date}>
+                    {p.period_date}
                   </SelectItem>
                 ))}
               </SelectContent>
