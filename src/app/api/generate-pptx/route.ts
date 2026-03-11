@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const deck = deckRaw as {
       id: string
       title: string
-      content: Record<string, unknown>
+      sections: unknown[] | null
       companies: { name: string } | null
       period_start?: string
       period_end?: string
@@ -65,10 +65,9 @@ export async function POST(request: NextRequest) {
       white: "ffffff",
     };
 
-    // Sections are stored in content.sections
-    const deckContent = (deck.content ?? {}) as Record<string, unknown>
-    const sections = (Array.isArray(deckContent.sections)
-      ? deckContent.sections
+    // Sections are stored directly on the deck row
+    const sections = (Array.isArray(deck.sections)
+      ? deck.sections
       : []) as Array<{ type: string; config?: Record<string, unknown> }>;
 
     for (const section of sections) {
@@ -256,7 +255,7 @@ export async function POST(request: NextRequest) {
 
     const buffer = (await pptx.write({ outputType: "nodebuffer" })) as Buffer;
 
-    const safeTitle = deck.title.replace(/[^a-zA-Z0-9]/g, "_")
+    const safeTitle = (deck.title ?? "deck").replace(/[^a-zA-Z0-9]/g, "_")
     return new NextResponse(buffer as unknown as BodyInit, {
       headers: {
         "Content-Type":

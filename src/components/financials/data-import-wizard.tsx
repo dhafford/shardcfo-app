@@ -60,6 +60,7 @@ const APP_FIELDS = [
   { value: "account_type", label: "Account Type" },
   { value: "amount", label: "Amount" },
   { value: "date", label: "Date / Period" },
+  { value: "period_date", label: "Period Date (YYYY-MM)" },
   { value: "period_label", label: "Period Label" },
   { value: "debit", label: "Debit" },
   { value: "credit", label: "Credit" },
@@ -73,7 +74,7 @@ interface DataImportWizardProps {
     rows: Record<string, string>[];
     mapping: ColumnMapping;
     companyId: string;
-  }) => Promise<{ success: boolean; imported: number; failed: number; errors: string[] }>;
+  }) => Promise<{ success: boolean; imported: number; failed: number; errors: string[]; periodsCreated?: number }>;
   className?: string;
 }
 
@@ -207,7 +208,7 @@ export function DataImportWizard({
   const [importState, setImportState] = React.useState<{
     running: boolean;
     progress: number;
-    result: { success: boolean; imported: number; failed: number; errors: string[] } | null;
+    result: { success: boolean; imported: number; failed: number; errors: string[]; periodsCreated?: number } | null;
   }>({ running: false, progress: 0, result: null });
 
   // ---------------------------------------------------------------------------
@@ -593,13 +594,18 @@ export function DataImportWizard({
                   {importState.result.success ? "Import complete" : "Import failed"}
                 </p>
               </div>
-              <div className="flex gap-6 text-sm">
+              <div className="flex flex-wrap gap-6 text-sm">
                 <span className="text-green-700">
                   <strong>{importState.result.imported}</strong> rows imported
                 </span>
                 {importState.result.failed > 0 && (
                   <span className="text-red-700">
                     <strong>{importState.result.failed}</strong> rows failed
+                  </span>
+                )}
+                {(importState.result.periodsCreated ?? 0) > 0 && (
+                  <span className="text-blue-700">
+                    <strong>{importState.result.periodsCreated}</strong> periods auto-created
                   </span>
                 )}
               </div>

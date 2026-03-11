@@ -136,12 +136,19 @@ export function validateData(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const requiredFields = ["account_name", "amount"];
-  for (const field of requiredFields) {
-    const mappedHeader = Object.entries(mapping).find(([, v]) => v === field)?.[0];
-    if (!mappedHeader) {
-      errors.push(`Required field "${field}" is not mapped to any column.`);
-    }
+  // Need at least one account identifier
+  const hasAccountCode = Object.values(mapping).includes("account_code");
+  const hasAccountName = Object.values(mapping).includes("account_name");
+  if (!hasAccountCode && !hasAccountName) {
+    errors.push(`At least "Account Code" or "Account Name" must be mapped to a column.`);
+  }
+
+  // Need an amount source (either amount or debit/credit)
+  const hasAmount = Object.values(mapping).includes("amount");
+  const hasDebit = Object.values(mapping).includes("debit");
+  const hasCredit = Object.values(mapping).includes("credit");
+  if (!hasAmount && !hasDebit && !hasCredit) {
+    errors.push(`"Amount" or "Debit"/"Credit" must be mapped to a column.`);
   }
 
   if (rows.length === 0) {

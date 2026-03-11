@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server"
 import type { DeckStatus, Json } from "@/lib/supabase/types"
 import type { DeckSection } from "@/components/board-deck/deck-editor"
 
+const VALID_DECK_STATUSES: DeckStatus[] = ["draft", "review", "final", "presented"]
+
 // ---------------------------------------------------------------------------
 // updateDeck
 // Updates top-level deck fields and/or the full sections array.
@@ -28,21 +30,21 @@ export async function updateDeck(
     return { success: false, error: "deckId and companyId are required" }
   }
 
-  const updates: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  }
+  const updates: Record<string, unknown> = {}
 
   const title = formData.get("title") as string | null
   if (title) updates.title = title
 
-  const status = formData.get("status") as DeckStatus | null
-  if (status) updates.status = status
+  const status = formData.get("status") as string | null
+  if (status && VALID_DECK_STATUSES.includes(status as DeckStatus)) {
+    updates.status = status
+  }
 
   const sectionsJson = formData.get("sections") as string | null
   if (sectionsJson) {
     try {
       const sections = JSON.parse(sectionsJson) as DeckSection[]
-      updates.content = { sections } as unknown as Json
+      updates.sections = sections as unknown as Json
     } catch {
       return { success: false, error: "Invalid sections JSON" }
     }
@@ -67,7 +69,7 @@ export async function updateDeck(
 
 // ---------------------------------------------------------------------------
 // addSection
-// Appends a new section to the deck's content.sections array.
+// Appends a new section to the deck's sections array.
 // ---------------------------------------------------------------------------
 
 export async function addSection(
@@ -89,11 +91,11 @@ export async function addSection(
     return { success: false, error: "deckId, companyId, and sectionType are required" }
   }
 
-  // Fetch current deck content
+  // Fetch current deck sections
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: deck, error: fetchError } = await (supabase as any)
     .from("board_decks")
-    .select("content")
+    .select("sections")
     .eq("id", deckId)
     .eq("company_id", companyId)
     .single()
@@ -102,9 +104,8 @@ export async function addSection(
     return { success: false, error: fetchError?.message ?? "Deck not found" }
   }
 
-  const content = (deck.content as Record<string, unknown>) ?? {}
-  const sections = Array.isArray(content.sections)
-    ? (content.sections as DeckSection[])
+  const sections = Array.isArray(deck.sections)
+    ? (deck.sections as DeckSection[])
     : []
 
   const newSection: DeckSection = {
@@ -114,15 +115,12 @@ export async function addSection(
     order: sections.length,
   }
 
-  const updated = { ...content, sections: [...sections, newSection] }
+  const updated = [...sections, newSection]
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: updateError } = await (supabase as any)
     .from("board_decks")
-    .update({
-      content: updated as unknown as Json,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ sections: updated as unknown as Json })
     .eq("id", deckId)
     .eq("company_id", companyId)
 
@@ -160,7 +158,7 @@ export async function removeSection(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: deck, error: fetchError } = await (supabase as any)
     .from("board_decks")
-    .select("content")
+    .select("sections")
     .eq("id", deckId)
     .eq("company_id", companyId)
     .single()
@@ -169,24 +167,18 @@ export async function removeSection(
     return { success: false, error: fetchError?.message ?? "Deck not found" }
   }
 
-  const content = (deck.content as Record<string, unknown>) ?? {}
-  const sections = Array.isArray(content.sections)
-    ? (content.sections as DeckSection[])
+  const sections = Array.isArray(deck.sections)
+    ? (deck.sections as DeckSection[])
     : []
 
   const filtered = sections
     .filter((s) => s.id !== sectionId)
     .map((s, i) => ({ ...s, order: i }))
 
-  const updated = { ...content, sections: filtered }
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: updateError } = await (supabase as any)
     .from("board_decks")
-    .update({
-      content: updated as unknown as Json,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ sections: filtered as unknown as Json })
     .eq("id", deckId)
     .eq("company_id", companyId)
 
@@ -231,7 +223,7 @@ export async function reorderSections(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: deck, error: fetchError } = await (supabase as any)
     .from("board_decks")
-    .select("content")
+    .select("sections")
     .eq("id", deckId)
     .eq("company_id", companyId)
     .single()
@@ -240,9 +232,8 @@ export async function reorderSections(
     return { success: false, error: fetchError?.message ?? "Deck not found" }
   }
 
-  const content = (deck.content as Record<string, unknown>) ?? {}
-  const sections = Array.isArray(content.sections)
-    ? (content.sections as DeckSection[])
+  const sections = Array.isArray(deck.sections)
+    ? (deck.sections as DeckSection[])
     : []
 
   // Map sections by id for fast lookup
@@ -256,15 +247,10 @@ export async function reorderSections(
     })
     .filter((s): s is DeckSection => s !== null)
 
-  const updated = { ...content, sections: reordered }
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: updateError } = await (supabase as any)
     .from("board_decks")
-    .update({
-      content: updated as unknown as Json,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ sections: reordered as unknown as Json })
     .eq("id", deckId)
     .eq("company_id", companyId)
 

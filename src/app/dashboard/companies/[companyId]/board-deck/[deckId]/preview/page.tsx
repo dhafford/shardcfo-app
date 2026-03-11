@@ -38,11 +38,11 @@ export default async function DeckPreviewPage({ params }: PageProps) {
     notFound();
   }
 
-  const content = (deck.content as Record<string, unknown>) ?? {};
-  const rawSections = Array.isArray(content.sections) ? content.sections : [];
+  const rawSections = Array.isArray(deck.sections) ? deck.sections : [];
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sections: DeckSection[] = rawSections
-    .map((s, i) => {
+    .map((s: any, i: number) => {
       const section = s as Record<string, unknown>;
       return {
         id: (section.id as string) || String(i),
@@ -51,7 +51,7 @@ export default async function DeckPreviewPage({ params }: PageProps) {
         order: typeof section.order === "number" ? section.order : i,
       };
     })
-    .sort((a, b) => a.order - b.order);
+    .sort((a: DeckSection, b: DeckSection) => a.order - b.order);
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">

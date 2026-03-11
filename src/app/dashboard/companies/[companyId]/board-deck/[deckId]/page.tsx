@@ -37,11 +37,11 @@ export default async function DeckEditorPage({ params }: PageProps) {
     notFound();
   }
 
-  // Parse sections from deck content
-  const content = (deck.content as Record<string, unknown>) ?? {};
-  const rawSections = Array.isArray(content.sections) ? content.sections : [];
+  // Parse sections from deck
+  const rawSections = Array.isArray(deck.sections) ? deck.sections : [];
 
-  const initialSections: DeckSection[] = rawSections.map((s, i) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const initialSections: DeckSection[] = rawSections.map((s: any, i: number) => {
     const section = s as Record<string, unknown>;
     return {
       id: (section.id as string) || crypto.randomUUID(),
