@@ -96,9 +96,9 @@ export async function createCompany(
     .insert({
       name,
       owner_id: user.id,
-      legal_entity: legalEntity ?? null,
-      industry: industry ?? null,
-      stage: stage ?? null,
+      legal_entity: legalEntity || null,
+      industry: industry || null,
+      stage: stage || null,
       fiscal_year_end_month,
       currency,
       status: "active" as const,

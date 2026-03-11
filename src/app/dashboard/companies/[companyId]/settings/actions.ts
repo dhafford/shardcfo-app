@@ -61,9 +61,9 @@ export async function updateCompany(formData: FormData) {
   };
 
   if (name) updates.name = name;
-  if (industry !== null) updates.industry = industry;
+  if (industry !== null) updates.industry = industry || null;
   if (currency) updates.currency = currency;
-  if (legalEntity !== null) updates.legal_entity = legalEntity;
+  if (legalEntity !== null) updates.legal_entity = legalEntity || null;
   if (fundingStage) updates.stage = fundingStage;
 
   if (fiscalYearEndMonthRaw) {
