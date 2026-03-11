@@ -305,7 +305,45 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
       }
 
       // Resolve account with fuzzy matching
-      const account = resolveAccount(rawCode, rawName);
+      let account = resolveAccount(rawCode, rawName);
+
+      // Auto-create account if not found and we have a category from the import
+      if (!account && (rawCode || rawName)) {
+        const rawCategory = reverseMap["account_type"] ? row[reverseMap["account_type"]] : "";
+        const validCategories = [
+          "revenue", "cogs", "operating_expense", "other_income",
+          "other_expense", "asset", "liability", "equity",
+        ];
+        const category = validCategories.includes(rawCategory) ? rawCategory : "";
+
+        if (category) {
+          const accountNumber = rawCode?.trim() || `AUTO-${Date.now()}-${accountsCreated}`;
+          const accountName = rawName?.trim() || accountNumber;
+
+          const { data: created, error: createErr } = await supabase
+            .from("accounts")
+            .insert({
+              company_id: companyId,
+              account_number: accountNumber,
+              name: accountName,
+              category,
+              is_active: true,
+              display_order: 0,
+            })
+            .select("id, account_number, name, category")
+            .single();
+
+          if (!createErr && created) {
+            const newAcct = created as Pick<AccountRow, "id" | "account_number" | "name" | "category">;
+            account = newAcct;
+            accountByNumber.set(newAcct.account_number.toLowerCase(), newAcct);
+            accountByName.set(newAcct.name.toLowerCase(), newAcct);
+            accounts.push(newAcct);
+            accountsCreated++;
+          }
+        }
+      }
+
       if (!account) {
         errors.push(`Row ${rowNum}: Could not match account "${rawCode || rawName}" to any existing account.`);
         failed++;

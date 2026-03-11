@@ -33,7 +33,21 @@ import { parseCSV } from "@/lib/import/csv-parser";
 import { parseXLSX } from "@/lib/import/xlsx-parser";
 import { detectColumns } from "@/lib/import/csv-parser";
 import { validateData } from "@/lib/import/csv-parser";
+import { parseQuickBooksReport } from "@/lib/import/quickbooks-parser";
+import { parseXeroReport } from "@/lib/import/xero-parser";
 import type { AccountRow } from "@/lib/supabase/types";
+
+// ---------------------------------------------------------------------------
+// Import source types
+// ---------------------------------------------------------------------------
+
+export type ImportSource = "generic" | "quickbooks" | "xero";
+
+const IMPORT_SOURCES: { value: ImportSource; label: string; description: string }[] = [
+  { value: "generic", label: "Generic CSV / Excel", description: "Standard spreadsheet with columns for account, amount, and date" },
+  { value: "quickbooks", label: "QuickBooks Online", description: "P&L or Balance Sheet exported from QuickBooks" },
+  { value: "xero", label: "Xero", description: "P&L or Balance Sheet exported from Xero" },
+];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -198,6 +212,7 @@ export function DataImportWizard({
   className,
 }: DataImportWizardProps) {
   const [step, setStep] = React.useState<WizardStep>("upload");
+  const [importSource, setImportSource] = React.useState<ImportSource>("generic");
   const [isDragging, setIsDragging] = React.useState(false);
   const [parsedFile, setParsedFile] = React.useState<ParsedFile | null>(null);
   const [isParsing, setIsParsing] = React.useState(false);
@@ -222,7 +237,16 @@ export function DataImportWizard({
 
     try {
       let parsed: ParsedFile;
-      if (file.name.endsWith(".csv")) {
+
+      if (importSource === "quickbooks") {
+        // QuickBooks report parser — transforms hierarchical report into flat rows
+        const result = await parseQuickBooksReport(file);
+        parsed = { name: file.name, ...result };
+      } else if (importSource === "xero") {
+        // Xero report parser — transforms hierarchical report into flat rows
+        const result = await parseXeroReport(file);
+        parsed = { name: file.name, ...result };
+      } else if (file.name.endsWith(".csv")) {
         const result = await parseCSV(file);
         parsed = { name: file.name, ...result };
       } else {
@@ -246,6 +270,20 @@ export function DataImportWizard({
           autoMapping[col.originalName] = col.suggestedField;
         }
       }
+
+      // For QBO/Xero, columns are already standardised — pre-fill all mappings
+      if (importSource === "quickbooks" || importSource === "xero") {
+        for (const header of parsed.headers) {
+          if (!autoMapping[header]) {
+            // Direct match: header names match app field names exactly
+            const directMatch = APP_FIELDS.find((f) => f.value === header);
+            if (directMatch) {
+              autoMapping[header] = directMatch.value;
+            }
+          }
+        }
+      }
+
       setColumnMapping(autoMapping);
       setStep("preview");
     } catch (err) {
@@ -253,7 +291,7 @@ export function DataImportWizard({
     } finally {
       setIsParsing(false);
     }
-  }, []);
+  }, [importSource]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -333,6 +371,7 @@ export function DataImportWizard({
     setValidationWarnings([]);
     setImportState({ running: false, progress: 0, result: null });
     setParseError(null);
+    setImportSource("generic");
   };
 
   // ---------------------------------------------------------------------------
@@ -346,6 +385,36 @@ export function DataImportWizard({
       {/* Step 1: Upload */}
       {step === "upload" && (
         <div className="space-y-4">
+          {/* Source selector */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Import Source</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {IMPORT_SOURCES.map((source) => (
+                <button
+                  key={source.value}
+                  type="button"
+                  onClick={() => setImportSource(source.value)}
+                  className={cn(
+                    "flex flex-col items-start gap-1 rounded-lg border-2 p-3 text-left transition-colors",
+                    importSource === source.value
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  )}
+                >
+                  <span className={cn(
+                    "text-sm font-semibold",
+                    importSource === source.value ? "text-blue-700" : "text-slate-700"
+                  )}>
+                    {source.label}
+                  </span>
+                  <span className="text-xs text-muted-foreground leading-snug">
+                    {source.description}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <FileDropZone
             onFile={handleFile}
             isDragging={isDragging}
@@ -353,10 +422,23 @@ export function DataImportWizard({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           />
+
+          {importSource !== "generic" && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+              <p className="font-medium">
+                {importSource === "quickbooks" ? "QuickBooks" : "Xero"} report import
+              </p>
+              <p className="mt-1 text-blue-600">
+                Export a P&L or Balance Sheet report from {importSource === "quickbooks" ? "QuickBooks Online" : "Xero"} as
+                CSV, then upload it here. Account categories will be detected automatically from the report structure.
+              </p>
+            </div>
+          )}
+
           {isParsing && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Parsing file...
+              Parsing {importSource === "generic" ? "file" : `${importSource === "quickbooks" ? "QuickBooks" : "Xero"} report`}...
             </div>
           )}
           {parseError && (
