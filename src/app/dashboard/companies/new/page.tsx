@@ -38,13 +38,12 @@ const MONTH_NAMES = [
 ];
 
 const STAGE_OPTIONS = [
-  { value: "pre-seed", label: "Pre-Seed" },
+  { value: "pre_seed", label: "Pre-Seed" },
   { value: "seed", label: "Seed" },
-  { value: "series-a", label: "Series A" },
-  { value: "series-b", label: "Series B" },
-  { value: "series-c", label: "Series C+" },
+  { value: "series_a", label: "Series A" },
+  { value: "series_b", label: "Series B" },
+  { value: "series_c", label: "Series C+" },
   { value: "growth", label: "Growth" },
-  { value: "profitable", label: "Profitable" },
   { value: "public", label: "Public" },
 ];
 

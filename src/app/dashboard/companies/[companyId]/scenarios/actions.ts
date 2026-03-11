@@ -244,7 +244,7 @@ export async function runScenarioProjection(
       cogs += item.amount;
     } else if (account.subcategory === "general_administrative") {
       payrollExpense += item.amount;
-    } else if (account.category === "opex") {
+    } else if (account.category === "operating_expense") {
       otherOpex += item.amount;
     }
   }

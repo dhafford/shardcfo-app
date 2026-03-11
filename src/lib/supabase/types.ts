@@ -34,8 +34,8 @@ export type MetricCategory =
   | 'retention'
   | 'sales'
   | 'other'
-export type DeckStatus = 'draft' | 'published' | 'archived'
-export type ImportStatus = 'pending' | 'processing' | 'completed' | 'failed'
+export type DeckStatus = 'draft' | 'review' | 'final' | 'presented'
+export type ImportStatus = 'pending' | 'processing' | 'mapped' | 'imported' | 'failed'
 export type ImportSource = 'csv' | 'excel' | 'quickbooks' | 'xero' | 'manual'
 export type ScenarioType = 'base' | 'upside' | 'downside' | 'custom'
 export type AuditAction = 'insert' | 'update' | 'delete' | 'login' | 'logout' | 'export'
@@ -372,6 +372,36 @@ export interface Database {
         Row: AuditLogRow
         Insert: AuditLogInsert
         Update: never
+        Relationships: []
+      }
+      dd_assessments: {
+        Row: DDAssessmentRow
+        Insert: DDAssessmentInsert
+        Update: DDAssessmentUpdate
+        Relationships: []
+      }
+      dd_items: {
+        Row: DDItemRow
+        Insert: DDItemInsert
+        Update: DDItemUpdate
+        Relationships: []
+      }
+      data_room_documents: {
+        Row: DataRoomDocumentRow
+        Insert: DataRoomDocumentInsert
+        Update: DataRoomDocumentUpdate
+        Relationships: []
+      }
+      dd_findings: {
+        Row: DDFindingRow
+        Insert: DDFindingInsert
+        Update: DDFindingUpdate
+        Relationships: []
+      }
+      qoe_adjustments: {
+        Row: QoEAdjustmentRow
+        Insert: QoEAdjustmentInsert
+        Update: QoEAdjustmentUpdate
         Relationships: []
       }
     }

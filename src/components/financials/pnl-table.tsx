@@ -63,9 +63,9 @@ const SECTIONS: Section[] = [
   { key: "revenue", label: "Revenue", accountTypes: ["revenue"], isSubtotal: false, indent: 0 },
   { key: "cogs", label: "Cost of Revenue", accountTypes: ["cogs"], isSubtotal: false, indent: 0 },
   { key: "gross_profit", label: "Gross Profit", accountTypes: [], isSubtotal: true, indent: 0 },
-  { key: "sales_marketing", label: "Sales & Marketing", accountTypes: ["opex"], isSubtotal: false, indent: 1 },
-  { key: "research_development", label: "Research & Development", accountTypes: ["opex"], isSubtotal: false, indent: 1 },
-  { key: "general_administrative", label: "General & Administrative", accountTypes: ["opex"], isSubtotal: false, indent: 1 },
+  { key: "sales_marketing", label: "Sales & Marketing", accountTypes: ["operating_expense"], isSubtotal: false, indent: 1 },
+  { key: "research_development", label: "Research & Development", accountTypes: ["operating_expense"], isSubtotal: false, indent: 1 },
+  { key: "general_administrative", label: "General & Administrative", accountTypes: ["operating_expense"], isSubtotal: false, indent: 1 },
   { key: "total_opex", label: "Total OpEx", accountTypes: [], isSubtotal: true, indent: 0 },
   { key: "ebitda", label: "EBITDA", accountTypes: [], isSubtotal: true, indent: 0 },
   { key: "other", label: "Other Income / Expense", accountTypes: ["other"], isSubtotal: false, indent: 0 },
@@ -79,7 +79,7 @@ const CATEGORY_TO_SECTION: Record<string, SectionKey> = {
   // Top-level categories
   revenue: "revenue",
   cogs: "cogs",
-  // opex subcategories
+  // operating_expense subcategories
   sales_marketing: "sales_marketing",
   research_development: "research_development",
   general_administrative: "general_administrative",
@@ -163,15 +163,15 @@ export function PnlTable({
       if (!acc.is_active) continue;
       let sectionKey: SectionKey | null = null;
 
-      if (acc.category === "opex" && acc.subcategory && CATEGORY_TO_SECTION[acc.subcategory]) {
-        // For opex accounts, use subcategory to determine which opex section they belong to
+      if (acc.category === "operating_expense" && acc.subcategory && CATEGORY_TO_SECTION[acc.subcategory]) {
+        // For operating_expense accounts, use subcategory to determine which section they belong to
         sectionKey = CATEGORY_TO_SECTION[acc.subcategory];
       } else if (CATEGORY_TO_SECTION[acc.category]) {
         sectionKey = CATEGORY_TO_SECTION[acc.category];
       }
 
-      if (!sectionKey && acc.category === "opex") {
-        sectionKey = "general_administrative"; // fallback for opex without subcategory
+      if (!sectionKey && acc.category === "operating_expense") {
+        sectionKey = "general_administrative"; // fallback for operating_expense without subcategory
       }
 
       if (sectionKey) {

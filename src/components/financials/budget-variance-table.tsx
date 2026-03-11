@@ -63,7 +63,7 @@ function calcVariance(actual: number, budget: number): { dollar: number; pct: nu
  * Revenue lines: over-actual is favorable. Expense lines: under-actual is favorable.
  */
 function isFavorable(actual: number, budget: number, accountType: string): boolean {
-  const isExpense = ["cogs", "opex"].includes(accountType);
+  const isExpense = ["cogs", "operating_expense"].includes(accountType);
   if (isExpense) {
     return actual <= budget; // spending less than budget = favorable
   }

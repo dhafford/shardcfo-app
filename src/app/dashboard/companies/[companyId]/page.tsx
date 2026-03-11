@@ -194,7 +194,7 @@ export default async function CompanyDashboardPage({
 
     const opexAccountIds = new Set(
       accounts
-        .filter((a) => a.category === "opex" || a.category === "cogs")
+        .filter((a) => a.category === "operating_expense" || a.category === "cogs")
         .map((a) => a.id)
     );
 
@@ -301,7 +301,7 @@ export default async function CompanyDashboardPage({
     for (const item of recentLineItems) {
       const account = accountMap.get(item.account_id);
       if (!account) continue;
-      if (account.category !== "opex" && account.category !== "cogs") continue;
+      if (account.category !== "operating_expense" && account.category !== "cogs") continue;
 
       // Use subcategory if available, otherwise fall back to category
       const key = account.subcategory ?? account.category;
