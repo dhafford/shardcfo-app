@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { PeriodSelector } from "@/components/shared/period-selector";
 import { MetricsDashboardClient } from "./page-client";
 import {
@@ -61,16 +61,10 @@ export default async function MetricsPage({ params, searchParams }: PageProps) {
   const { companyId } = await params;
   await searchParams; // consume to satisfy Next.js
 
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth();
 
   // Fetch company to get funding stage for benchmarks
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: companyRaw } = await (supabase as any)
+  const { data: companyRaw } = await supabase
     .from("companies")
     .select("id, name, settings, status")
     .eq("id", companyId)
@@ -87,8 +81,7 @@ export default async function MetricsPage({ params, searchParams }: PageProps) {
   const stageBenchmarks = SAAS_BENCHMARKS[fundingStage];
 
   // Fetch financial periods (actual) for the period selector and dropdowns
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: periodsRaw } = await (supabase as any)
+  const { data: periodsRaw } = await supabase
     .from("financial_periods")
     .select("id, period_date, period_type")
     .eq("company_id", companyId)
@@ -101,8 +94,7 @@ export default async function MetricsPage({ params, searchParams }: PageProps) {
   const currentPeriodDate = currentPeriod?.period_date ?? "";
 
   // Fetch all metrics for this company (last 24 months)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: metricsRaw } = await (supabase as any)
+  const { data: metricsRaw } = await supabase
     .from("metrics")
     .select("*")
     .eq("company_id", companyId)

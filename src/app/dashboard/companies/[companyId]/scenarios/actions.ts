@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import {
   projectScenario,
   type BasePeriodActuals,
@@ -17,12 +17,7 @@ import type { Json } from "@/lib/supabase/types";
 // ---------------------------------------------------------------------------
 
 export async function createScenario(formData: FormData) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth({ redirect: false });
 
   const companyId = formData.get("companyId") as string;
   const name = formData.get("name") as string;
@@ -45,8 +40,7 @@ export async function createScenario(formData: FormData) {
     projectionMonths: 12,
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("scenarios")
     .insert({
       company_id: companyId,
@@ -64,7 +58,7 @@ export async function createScenario(formData: FormData) {
   }
 
   revalidatePath(`/dashboard/companies/${companyId}/scenarios`);
-  redirect(`/dashboard/companies/${companyId}/scenarios/${(data as { id: string }).id}`);
+  redirect(`/dashboard/companies/${companyId}/scenarios/${data.id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,12 +66,7 @@ export async function createScenario(formData: FormData) {
 // ---------------------------------------------------------------------------
 
 export async function updateScenario(formData: FormData) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth({ redirect: false });
 
   const companyId = formData.get("companyId") as string;
   const scenarioId = formData.get("scenarioId") as string;
@@ -100,8 +89,7 @@ export async function updateScenario(formData: FormData) {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("scenarios")
     .update(updates)
     .eq("id", scenarioId)
@@ -120,12 +108,7 @@ export async function updateScenario(formData: FormData) {
 // ---------------------------------------------------------------------------
 
 export async function deleteScenario(formData: FormData) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth({ redirect: false });
 
   const companyId = formData.get("companyId") as string;
   const scenarioId = formData.get("scenarioId") as string;
@@ -134,8 +117,7 @@ export async function deleteScenario(formData: FormData) {
     throw new Error("companyId and scenarioId are required");
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("scenarios")
     .delete()
     .eq("id", scenarioId)
@@ -153,24 +135,14 @@ export async function deleteScenario(formData: FormData) {
 // runScenarioProjection
 // ---------------------------------------------------------------------------
 
-/**
- * Runs the scenario engine against base period actuals fetched from
- * the database and returns the projection result as a JSON string.
- */
 export async function runScenarioProjection(
   companyId: string,
   scenarioId: string
 ): Promise<string> {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth({ redirect: false });
 
   // Fetch the scenario
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: scenarioRaw, error: scenarioError } = await (supabase as any)
+  const { data: scenarioRaw, error: scenarioError } = await supabase
     .from("scenarios")
     .select("*")
     .eq("id", scenarioId)
@@ -184,8 +156,7 @@ export async function runScenarioProjection(
   }
 
   // Fetch the most recent actual financial period
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: latestPeriodRaw } = await (supabase as any)
+  const { data: latestPeriodRaw } = await supabase
     .from("financial_periods")
     .select("id, period_date")
     .eq("company_id", companyId)
@@ -204,8 +175,7 @@ export async function runScenarioProjection(
   }
 
   // Fetch line items for the base period (using period_id, the actual FK)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: lineItemsRaw } = await (supabase as any)
+  const { data: lineItemsRaw } = await supabase
     .from("line_items")
     .select("account_id, amount")
     .eq("period_id", latestPeriod.id);
@@ -216,8 +186,7 @@ export async function runScenarioProjection(
   >[];
 
   // Fetch accounts for categorization (category is the top-level type now)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: accountsRaw } = await (supabase as any)
+  const { data: accountsRaw } = await supabase
     .from("accounts")
     .select("id, category, subcategory")
     .eq("company_id", companyId);
@@ -250,8 +219,7 @@ export async function runScenarioProjection(
   }
 
   // Fetch MRR and cash balance from stored metrics
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: metricsRaw } = await (supabase as any)
+  const { data: metricsRaw } = await supabase
     .from("metrics")
     .select("metric_key, metric_value")
     .eq("company_id", companyId)

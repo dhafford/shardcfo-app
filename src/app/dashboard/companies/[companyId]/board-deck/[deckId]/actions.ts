@@ -1,9 +1,8 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import type { DeckStatus, Json } from "@/lib/supabase/types"
+import { requireAuth } from "@/lib/supabase/require-auth"
+import type { DeckStatus, Json, BoardDeckUpdate } from "@/lib/supabase/types"
 import type { DeckSection } from "@/components/board-deck/deck-editor"
 
 const VALID_DECK_STATUSES: DeckStatus[] = ["draft", "review", "final", "presented"]
@@ -16,12 +15,7 @@ const VALID_DECK_STATUSES: DeckStatus[] = ["draft", "review", "final", "presente
 export async function updateDeck(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
+  const { supabase } = await requireAuth({ redirect: false })
 
   const deckId = formData.get("deckId") as string
   const companyId = formData.get("companyId") as string
@@ -30,7 +24,7 @@ export async function updateDeck(
     return { success: false, error: "deckId and companyId are required" }
   }
 
-  const updates: Record<string, unknown> = {}
+  const updates: BoardDeckUpdate = {}
 
   const title = formData.get("title") as string | null
   if (title) updates.title = title
@@ -50,8 +44,7 @@ export async function updateDeck(
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("board_decks")
     .update(updates)
     .eq("id", deckId)
@@ -75,12 +68,7 @@ export async function updateDeck(
 export async function addSection(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
+  const { supabase } = await requireAuth({ redirect: false })
 
   const deckId = formData.get("deckId") as string
   const companyId = formData.get("companyId") as string
@@ -92,8 +80,7 @@ export async function addSection(
   }
 
   // Fetch current deck sections
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: deck, error: fetchError } = await (supabase as any)
+  const { data: deck, error: fetchError } = await supabase
     .from("board_decks")
     .select("sections")
     .eq("id", deckId)
@@ -105,7 +92,7 @@ export async function addSection(
   }
 
   const sections = Array.isArray(deck.sections)
-    ? (deck.sections as DeckSection[])
+    ? (deck.sections as unknown as DeckSection[])
     : []
 
   const newSection: DeckSection = {
@@ -117,8 +104,7 @@ export async function addSection(
 
   const updated = [...sections, newSection]
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: updateError } = await (supabase as any)
+  const { error: updateError } = await supabase
     .from("board_decks")
     .update({ sections: updated as unknown as Json })
     .eq("id", deckId)
@@ -140,12 +126,7 @@ export async function addSection(
 export async function removeSection(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
+  const { supabase } = await requireAuth({ redirect: false })
 
   const deckId = formData.get("deckId") as string
   const companyId = formData.get("companyId") as string
@@ -155,8 +136,7 @@ export async function removeSection(
     return { success: false, error: "deckId, companyId, and sectionId are required" }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: deck, error: fetchError } = await (supabase as any)
+  const { data: deck, error: fetchError } = await supabase
     .from("board_decks")
     .select("sections")
     .eq("id", deckId)
@@ -168,15 +148,14 @@ export async function removeSection(
   }
 
   const sections = Array.isArray(deck.sections)
-    ? (deck.sections as DeckSection[])
+    ? (deck.sections as unknown as DeckSection[])
     : []
 
   const filtered = sections
     .filter((s) => s.id !== sectionId)
     .map((s, i) => ({ ...s, order: i }))
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: updateError } = await (supabase as any)
+  const { error: updateError } = await supabase
     .from("board_decks")
     .update({ sections: filtered as unknown as Json })
     .eq("id", deckId)
@@ -198,12 +177,7 @@ export async function removeSection(
 export async function reorderSections(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
+  const { supabase } = await requireAuth({ redirect: false })
 
   const deckId = formData.get("deckId") as string
   const companyId = formData.get("companyId") as string
@@ -220,8 +194,7 @@ export async function reorderSections(
     return { success: false, error: "Invalid orderedIds JSON" }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: deck, error: fetchError } = await (supabase as any)
+  const { data: deck, error: fetchError } = await supabase
     .from("board_decks")
     .select("sections")
     .eq("id", deckId)
@@ -233,7 +206,7 @@ export async function reorderSections(
   }
 
   const sections = Array.isArray(deck.sections)
-    ? (deck.sections as DeckSection[])
+    ? (deck.sections as unknown as DeckSection[])
     : []
 
   // Map sections by id for fast lookup
@@ -247,8 +220,7 @@ export async function reorderSections(
     })
     .filter((s): s is DeckSection => s !== null)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: updateError } = await (supabase as any)
+  const { error: updateError } = await supabase
     .from("board_decks")
     .update({ sections: reordered as unknown as Json })
     .eq("id", deckId)
@@ -270,12 +242,7 @@ export async function reorderSections(
 export async function generatePdf(
   formData: FormData
 ): Promise<{ success: boolean; url?: string; error?: string }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
+  await requireAuth({ redirect: false })
 
   const deckId = formData.get("deckId") as string
   const companyId = formData.get("companyId") as string
@@ -296,12 +263,7 @@ export async function generatePdf(
 export async function generatePptx(
   formData: FormData
 ): Promise<{ success: boolean; apiUrl?: string; error?: string }> {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
+  await requireAuth({ redirect: false })
 
   const deckId = formData.get("deckId") as string
   const companyId = formData.get("companyId") as string

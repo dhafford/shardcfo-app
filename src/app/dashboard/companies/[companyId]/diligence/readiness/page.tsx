@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import {
   READINESS_ITEMS,
   autoDetectStatuses,
@@ -19,12 +19,7 @@ interface PageProps {
 
 export default async function ReadinessPage({ params }: PageProps) {
   const { companyId } = await params;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth();
 
   const { data: rawCompany } = await supabase
     .from("companies")
@@ -77,7 +72,7 @@ export default async function ReadinessPage({ params }: PageProps) {
     .eq("company_id", companyId);
 
   // Fetch latest saved assessment to pre-populate manual statuses
-  const { data: latestAssessmentRaw } = await (supabase as any)
+  const { data: latestAssessmentRaw } = await supabase
     .from("dd_assessments")
     .select("overall_score, stage, items")
     .eq("company_id", companyId)

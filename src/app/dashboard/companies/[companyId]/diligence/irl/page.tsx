@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { IRLTrackerClient } from "@/components/diligence/irl-tracker-client";
 import type { CompanyRow, DDItemRow } from "@/lib/supabase/types";
 
@@ -9,16 +9,9 @@ interface PageProps {
 
 export default async function IRLPage({ params }: PageProps) {
   const { companyId } = await params;
+  const { supabase } = await requireAuth();
 
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: companyRaw } = await (supabase as any)
+  const { data: companyRaw } = await supabase
     .from("companies")
     .select("id, name, stage, status")
     .eq("id", companyId)
@@ -27,8 +20,7 @@ export default async function IRLPage({ params }: PageProps) {
   const company = companyRaw as CompanyRow | null;
   if (!company) notFound();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: itemsRaw } = await (supabase as any)
+  const { data: itemsRaw } = await supabase
     .from("dd_items")
     .select("*")
     .eq("company_id", companyId)

@@ -1,11 +1,7 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { DeckEditor } from "@/components/board-deck/deck-editor";
 import type { DeckSection } from "@/components/board-deck/deck-editor";
-
-// ---------------------------------------------------------------------------
-// Page — Server Component wrapper for the deck editor
-// ---------------------------------------------------------------------------
 
 interface PageProps {
   params: Promise<{ companyId: string; deckId: string }>;
@@ -13,24 +9,17 @@ interface PageProps {
 
 export default async function DeckEditorPage({ params }: PageProps) {
   const { companyId, deckId } = await params;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth();
 
   // Fetch deck and company in parallel
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any
   const [{ data: deck }, { data: company }] = await Promise.all([
-    db
+    supabase
       .from("board_decks")
       .select("*")
       .eq("id", deckId)
       .eq("company_id", companyId)
       .single(),
-    db.from("companies").select("*").eq("id", companyId).single(),
+    supabase.from("companies").select("*").eq("id", companyId).single(),
   ]);
 
   if (!deck || !company) {

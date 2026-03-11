@@ -2,24 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { createClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/lib/supabase/types";
+
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 // ---------------------------------------------------------------------------
 // updateCompany
 // ---------------------------------------------------------------------------
 
-/**
- * Updates mutable company fields from the settings form.
- * Only admins and analysts assigned to the company may update it.
- */
 export async function updateCompany(formData: FormData) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, supabase } = await requireAuth({ redirect: false });
 
   const companyId = formData.get("companyId") as string;
   if (!companyId) throw new Error("companyId is required");
@@ -34,8 +28,7 @@ export async function updateCompany(formData: FormData) {
   const foundedYearRaw = formData.get("foundedYear") as string | null;
 
   // Fetch existing metadata to merge (not overwrite) the JSONB
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (supabase as any)
+  const { data: existing } = await supabase
     .from("companies")
     .select("metadata, legal_entity, stage")
     .eq("id", companyId)
@@ -73,8 +66,7 @@ export async function updateCompany(formData: FormData) {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("companies")
     .update(updates)
     .eq("id", companyId);
@@ -91,17 +83,8 @@ export async function updateCompany(formData: FormData) {
 // archiveCompany
 // ---------------------------------------------------------------------------
 
-/**
- * Sets the company status to "archived" (or restores to "active").
- * Only admins may archive a company.
- */
 export async function archiveCompany(formData: FormData) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { user, supabase } = await requireAuth({ redirect: false });
 
   const companyId = formData.get("companyId") as string;
   if (!companyId) throw new Error("companyId is required");
@@ -112,8 +95,7 @@ export async function archiveCompany(formData: FormData) {
   const action = formData.get("action") as string; // "archive" | "unarchive"
   const newStatus = action === "unarchive" ? "active" : "archived";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("companies")
     .update({ status: newStatus })
     .eq("id", companyId);
@@ -134,8 +116,7 @@ export async function archiveCompany(formData: FormData) {
 // Access helpers
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function assertEditAccess(supabase: any, userId: string, companyId: string) {
+async function assertEditAccess(supabase: SupabaseClient, userId: string, companyId: string) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
@@ -158,8 +139,7 @@ async function assertEditAccess(supabase: any, userId: string, companyId: string
   if (!company) throw new Error("You do not have access to this company");
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function assertAdminAccess(supabase: any, userId: string) {
+async function assertAdminAccess(supabase: SupabaseClient, userId: string) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")

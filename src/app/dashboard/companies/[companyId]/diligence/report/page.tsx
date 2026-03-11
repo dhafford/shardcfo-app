@@ -1,7 +1,8 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { FDDReportClient } from "@/components/diligence/fdd-report-client";
 import { detectRedFlags, assessGoNoGo } from "@/lib/calculations/red-flags";
+import type { FindingSeverity } from "@/lib/calculations/red-flags";
 import type { CompanyRow, DDFindingRow, QoEAdjustmentRow, MetricRow } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -23,17 +24,11 @@ function monthsAgo(n: number): string {
 
 export default async function FDDReportPage({ params }: PageProps) {
   const { companyId } = await params;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth();
 
   // ─── Company ──────────────────────────────────────────────────────────────
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: companyRaw } = await (supabase as any)
+  const { data: companyRaw } = await supabase
     .from("companies")
     .select("id, name, industry, stage, status")
     .eq("id", companyId)
@@ -57,8 +52,7 @@ export default async function FDDReportPage({ params }: PageProps) {
     { count: accountCount },
   ] = await Promise.all([
     // Latest dd_assessment
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase as any)
+    supabase
       .from("dd_assessments")
       .select("overall_score, stage")
       .eq("company_id", companyId)
@@ -67,8 +61,7 @@ export default async function FDDReportPage({ params }: PageProps) {
       .maybeSingle(),
 
     // All dd_findings
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase as any)
+    supabase
       .from("dd_findings")
       .select("*")
       .eq("company_id", companyId)
@@ -76,16 +69,14 @@ export default async function FDDReportPage({ params }: PageProps) {
       .order("created_at", { ascending: false }),
 
     // All qoe_adjustments
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase as any)
+    supabase
       .from("qoe_adjustments")
       .select("*")
       .eq("company_id", companyId)
       .order("period_date", { ascending: false }),
 
     // Latest metrics — one row per metric_key, most recent period_date
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase as any)
+    supabase
       .from("metrics")
       .select("metric_key, metric_value, period_date")
       .eq("company_id", companyId)
@@ -93,7 +84,7 @@ export default async function FDDReportPage({ params }: PageProps) {
       .limit(200),
 
     // P&L trailing 12 months via RPC
-    (supabase as any).rpc("get_pnl_summary", {
+    supabase.rpc("get_pnl_summary", {
       p_company_id: companyId,
       p_start_date: trailingStart,
       p_end_date: today,
@@ -148,7 +139,7 @@ export default async function FDDReportPage({ params }: PageProps) {
 
   const pnlData = pnlError
     ? []
-    : ((pnlRaw ?? []) as PnlRow[]).map((r) => ({
+    : ((pnlRaw ?? []) as unknown as PnlRow[]).map((r) => ({
         period: r.period,
         revenue: r.revenue ?? 0,
         cogs: r.cogs ?? 0,
@@ -198,7 +189,7 @@ export default async function FDDReportPage({ params }: PageProps) {
       category: f.category,
       title: f.title,
       description: f.description ?? "",
-      severity: f.severity,
+      severity: f.severity as unknown as FindingSeverity,
       impact: f.impact ?? "",
       recommendation: f.recommendation ?? "",
     })),

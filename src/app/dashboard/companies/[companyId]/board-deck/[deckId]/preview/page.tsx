@@ -1,13 +1,9 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { DeckPreviewNavigator } from "./navigator";
 import type { DeckSection } from "@/components/board-deck/deck-editor";
-
-// ---------------------------------------------------------------------------
-// Server Component — fetches deck data, passes to client navigator
-// ---------------------------------------------------------------------------
 
 interface PageProps {
   params: Promise<{ companyId: string; deckId: string }>;
@@ -15,23 +11,16 @@ interface PageProps {
 
 export default async function DeckPreviewPage({ params }: PageProps) {
   const { companyId, deckId } = await params;
-  const supabase = await createClient();
+  const { supabase } = await requireAuth();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any
   const [{ data: deck }, { data: company }] = await Promise.all([
-    db
+    supabase
       .from("board_decks")
       .select("*")
       .eq("id", deckId)
       .eq("company_id", companyId)
       .single(),
-    db.from("companies").select("*").eq("id", companyId).single(),
+    supabase.from("companies").select("*").eq("id", companyId).single(),
   ]);
 
   if (!deck || !company) {

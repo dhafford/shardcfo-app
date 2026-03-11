@@ -1,6 +1,6 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import {
   Card,
   CardContent,
@@ -114,12 +114,7 @@ interface PageProps {
 
 export default async function DiligenceHubPage({ params }: PageProps) {
   const { companyId } = await params;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth();
 
   const { data: rawCompany } = await supabase
     .from("companies")
@@ -139,26 +134,26 @@ export default async function DiligenceHubPage({ params }: PageProps) {
     { data: dataRoomDocsRaw },
     { data: qoeAdjustmentsRaw },
   ] = await Promise.all([
-    (supabase as any)
+    supabase
       .from("dd_items")
       .select("id, status")
       .eq("company_id", companyId),
-    (supabase as any)
+    supabase
       .from("dd_findings")
       .select("id, severity, resolved")
       .eq("company_id", companyId),
-    (supabase as any)
+    supabase
       .from("dd_assessments")
       .select("overall_score, stage, created_at")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    (supabase as any)
+    supabase
       .from("data_room_documents")
       .select("id, status")
       .eq("company_id", companyId),
-    (supabase as any)
+    supabase
       .from("qoe_adjustments")
       .select("id, amount")
       .eq("company_id", companyId),

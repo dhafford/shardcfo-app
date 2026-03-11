@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { FindingsDashboardClient } from "@/components/diligence/findings-dashboard-client";
 import { detectRedFlags, assessGoNoGo } from "@/lib/calculations/red-flags";
 import type { CompanyRow, DDFindingRow, MetricRow } from "@/lib/supabase/types";
@@ -24,17 +24,10 @@ function latestMetric(
 
 export default async function FindingsPage({ params }: PageProps) {
   const { companyId } = await params;
-
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth();
 
   // Fetch company (for stage)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: companyRaw } = await (supabase as any)
+  const { data: companyRaw } = await supabase
     .from("companies")
     .select("id, name, stage, status")
     .eq("id", companyId)
@@ -46,8 +39,7 @@ export default async function FindingsPage({ params }: PageProps) {
   const companyStage = company.stage ?? "series_a";
 
   // Fetch stored dd_findings
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: findingsRaw } = await (supabase as any)
+  const { data: findingsRaw } = await supabase
     .from("dd_findings")
     .select("*")
     .eq("company_id", companyId)
@@ -57,8 +49,7 @@ export default async function FindingsPage({ params }: PageProps) {
   const storedFindings = (findingsRaw ?? []) as DDFindingRow[];
 
   // Fetch metrics for red-flag auto-detection
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: metricsRaw } = await (supabase as any)
+  const { data: metricsRaw } = await supabase
     .from("metrics")
     .select("*")
     .eq("company_id", companyId)
@@ -67,8 +58,7 @@ export default async function FindingsPage({ params }: PageProps) {
   const metrics = (metricsRaw ?? []) as MetricRow[];
 
   // Count financial periods
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: periodsRaw } = await (supabase as any)
+  const { data: periodsRaw } = await supabase
     .from("financial_periods")
     .select("id")
     .eq("company_id", companyId)
@@ -80,8 +70,7 @@ export default async function FindingsPage({ params }: PageProps) {
   const metricsMonthCount = new Set(metrics.map((m) => m.period_date)).size;
 
   // Count accounts
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: accountsRaw } = await (supabase as any)
+  const { data: accountsRaw } = await supabase
     .from("accounts")
     .select("id")
     .eq("company_id", companyId)
@@ -99,8 +88,7 @@ export default async function FindingsPage({ params }: PageProps) {
   const startStr = startDate.toISOString().slice(0, 7) + "-01";
   const endStr = endDate.toISOString().slice(0, 7) + "-01";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: pnlRaw } = await (supabase as any).rpc("get_pnl_summary", {
+  const { data: pnlRaw } = await supabase.rpc("get_pnl_summary", {
     p_company_id: companyId,
     p_start_date: startStr,
     p_end_date: endStr,
@@ -111,7 +99,7 @@ export default async function FindingsPage({ params }: PageProps) {
     cogs: number;
     opex: number;
   };
-  const pnlRows = (pnlRaw ?? []) as PnlRow[];
+  const pnlRows = (pnlRaw ?? []) as unknown as PnlRow[];
 
   const totalRevenue = pnlRows.reduce((sum, r) => sum + r.revenue, 0);
   const totalExpenses = pnlRows.reduce((sum, r) => sum + r.cogs + r.opex, 0);

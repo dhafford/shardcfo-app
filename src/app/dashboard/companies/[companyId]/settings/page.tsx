@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,15 +70,9 @@ interface PageProps {
 
 export default async function CompanySettingsPage({ params }: PageProps) {
   const { companyId } = await params;
-  const supabase = await createClient();
+  const { user, supabase } = await requireAuth();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: companyRaw } = await (supabase as any)
+  const { data: companyRaw } = await supabase
     .from("companies")
     .select("*")
     .eq("id", companyId)
@@ -88,9 +82,7 @@ export default async function CompanySettingsPage({ params }: PageProps) {
 
   if (!company) notFound();
 
-  // Determine if the current user is an admin (profiles.id = auth user UUID)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profileRaw } = await (supabase as any)
+  const { data: profileRaw } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)

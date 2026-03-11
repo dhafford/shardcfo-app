@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import {
@@ -9,7 +8,7 @@ import {
   Calendar,
   FileText,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -202,16 +201,9 @@ interface PageProps {
 
 export default async function BoardDeckListPage({ params }: PageProps) {
   const { companyId } = await params;
-  const supabase = await createClient();
+  const { supabase } = await requireAuth();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any
-  const { data: decks } = await db
+  const { data: decks } = await supabase
     .from("board_decks")
     .select("*")
     .eq("company_id", companyId)

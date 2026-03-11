@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { revalidatePath } from "next/cache";
 import type { AccountRow, FinancialPeriodRow, LineItemInsert } from "@/lib/supabase/types";
 
@@ -37,11 +37,6 @@ interface ProcessImportResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Normalize a date string from various formats to YYYY-MM-DD (first of month).
- * Handles: "2024-01", "2024-01-15", "01/2024", "Jan 2024", "January 2024",
- *          "1/15/2024", "01-15-2024", etc.
- */
 function normalizeDateToFirstOfMonth(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -109,12 +104,7 @@ function normalizeDateToFirstOfMonth(raw: string): string | null {
 // ---------------------------------------------------------------------------
 
 export async function processImport(input: ProcessImportInput): Promise<ProcessImportResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, imported: 0, failed: input.rows.length, errors: ["Not authenticated."] };
-  }
+  const { supabase } = await requireAuth({ redirect: false });
 
   const { rows, mapping, companyId, financialPeriodId } = input;
 
@@ -125,8 +115,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
   }
 
   // Create a data_imports record to track this import
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rawImportRecord, error: importRecordError } = await (supabase as any)
+  const { data: rawImportRecord, error: importRecordError } = await supabase
     .from("data_imports")
     .insert({
       company_id: companyId,
@@ -160,8 +149,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
   let periodsCreated = 0;
 
   // Fetch accounts for this company — build lookup maps
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rawAccounts } = await (supabase as any)
+  const { data: rawAccounts } = await supabase
     .from("accounts")
     .select("id, account_number, name, category")
     .eq("company_id", companyId);
@@ -174,8 +162,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
   const periodCache = new Map<string, string>();
 
   // Pre-fetch all existing periods for this company
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rawPeriods } = await (supabase as any)
+  const { data: rawPeriods } = await supabase
     .from("financial_periods")
     .select("id, period_date")
     .eq("company_id", companyId);
@@ -194,8 +181,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
     if (periodCache.has(normalized)) return periodCache.get(normalized)!;
 
     // Try to create the period
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: created, error: createErr } = await (supabase as any)
+    const { data: created, error: createErr } = await supabase
       .from("financial_periods")
       .insert({
         company_id: companyId,
@@ -208,8 +194,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
 
     if (createErr) {
       // Might be a unique constraint violation (race condition) — try fetching
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabase as any)
+      const { data: existing } = await supabase
         .from("financial_periods")
         .select("id")
         .eq("company_id", companyId)
@@ -354,8 +339,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
         notes: `import:${importId}`,
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: lineItemError } = await (supabase as any)
+      const { error: lineItemError } = await supabase
         .from("line_items")
         .upsert(lineItem, { onConflict: "period_id,account_id" });
 
@@ -372,8 +356,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
   }
 
   // Update import record with final status
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("data_imports").update({
+  await supabase.from("data_imports").update({
     status: failed === rows.length ? "failed" : "imported",
     error_log: errors.slice(0, 100),
   }).eq("id", importId);
@@ -399,12 +382,7 @@ export async function createAccounts(
   companyId: string,
   newAccounts: Array<{ account_number?: string; name: string; category: string }>
 ): Promise<{ created: number; errors: string[] }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { created: 0, errors: ["Not authenticated."] };
-  }
+  const { supabase } = await requireAuth({ redirect: false });
 
   const errors: string[] = [];
   let created = 0;
@@ -426,8 +404,7 @@ export async function createAccounts(
       display_order: 0,
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from("accounts").insert(insert);
+    const { error } = await supabase.from("accounts").insert(insert);
     if (error) {
       errors.push(`Failed to create "${acc.name}": ${error.message}`);
     } else {

@@ -21,7 +21,7 @@ interface CompanySwitcherProps {
 }
 
 const statusBadgeVariant: Record<
-  CompanyStatus,
+  string,
   "default" | "secondary" | "outline" | "destructive"
 > = {
   active: "default",

@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { DataRoomClient } from "@/components/diligence/data-room-client";
 import { DATA_ROOM_STRUCTURE } from "@/lib/constants";
 import type { CompanyRow, DataRoomDocumentRow } from "@/lib/supabase/types";
@@ -10,16 +10,9 @@ interface PageProps {
 
 export default async function DataRoomPage({ params }: PageProps) {
   const { companyId } = await params;
+  const { supabase } = await requireAuth();
 
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: companyRaw } = await (supabase as any)
+  const { data: companyRaw } = await supabase
     .from("companies")
     .select("id, name, stage, status")
     .eq("id", companyId)
@@ -28,8 +21,7 @@ export default async function DataRoomPage({ params }: PageProps) {
   const company = companyRaw as CompanyRow | null;
   if (!company) notFound();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: docsRaw } = await (supabase as any)
+  const { data: docsRaw } = await supabase
     .from("data_room_documents")
     .select("*")
     .eq("company_id", companyId)

@@ -2,27 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { PeriodSelector } from "@/components/shared/period-selector";
 import { BudgetVarianceTable } from "@/components/financials/budget-variance-table";
-import { format, subMonths, startOfMonth } from "date-fns";
+import { format } from "date-fns";
+import { getDateRangeFromParams } from "@/lib/date-utils";
 import type { BudgetVarianceRow } from "@/components/financials/budget-variance-table";
 import type { FinancialPeriodRow, AccountRow, LineItemRow } from "@/lib/supabase/types";
-
-type Granularity = "monthly" | "quarterly" | "annual";
-
-function getDateRangeFromParams(searchParams: {
-  range?: string;
-  granularity?: string;
-}): { startDate: Date; endDate: Date; granularity: Granularity } {
-  const now = startOfMonth(new Date());
-  const months = parseInt(searchParams.range || "12", 10);
-  const granularity = (searchParams.granularity as Granularity) || "monthly";
-  let startDate: Date;
-  if (months === -1) {
-    startDate = new Date(now.getFullYear(), 0, 1);
-  } else {
-    startDate = subMonths(now, months - 1);
-  }
-  return { startDate, endDate: now, granularity };
-}
 
 interface BudgetPageProps {
   params: Promise<{ companyId: string }>;

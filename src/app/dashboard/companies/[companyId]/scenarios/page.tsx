@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -112,15 +111,9 @@ export default async function ScenariosPage({
   const { companyId } = await params;
   await searchParams; // consume
 
-  const supabase = await createClient();
+  const { supabase } = await requireAuth();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: scenariosRaw } = await (supabase as any)
+  const { data: scenariosRaw } = await supabase
     .from("scenarios")
     .select("*")
     .eq("company_id", companyId)

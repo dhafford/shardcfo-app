@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { notFound } from "next/navigation";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { QoEDashboardClient } from "@/components/diligence/qoe-dashboard-client";
 import { calculateQoESummary, buildEBITDABridge } from "@/lib/calculations/qoe";
 import type { CompanyRow, QoEAdjustmentRow } from "@/lib/supabase/types";
@@ -13,16 +13,9 @@ interface PageProps {
 
 export default async function QoEPage({ params }: PageProps) {
   const { companyId } = await params;
+  const { supabase } = await requireAuth();
 
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: companyRaw } = await (supabase as any)
+  const { data: companyRaw } = await supabase
     .from("companies")
     .select("id, name, stage, status")
     .eq("id", companyId)
@@ -32,8 +25,7 @@ export default async function QoEPage({ params }: PageProps) {
   if (!company) notFound();
 
   // Fetch QoE adjustments
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: adjustmentsRaw } = await (supabase as any)
+  const { data: adjustmentsRaw } = await supabase
     .from("qoe_adjustments")
     .select("*")
     .eq("company_id", companyId)
@@ -50,8 +42,7 @@ export default async function QoEPage({ params }: PageProps) {
   const startStr = startDate.toISOString().slice(0, 7) + "-01";
   const endStr = endDate.toISOString().slice(0, 7) + "-01";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: pnlRaw } = await (supabase as any).rpc("get_pnl_summary", {
+  const { data: pnlRaw } = await supabase.rpc("get_pnl_summary", {
     p_company_id: companyId,
     p_start_date: startStr,
     p_end_date: endStr,
@@ -66,7 +57,7 @@ export default async function QoEPage({ params }: PageProps) {
     gross_profit: number;
     net_income: number;
   };
-  const pnlRows = (pnlRaw ?? []) as PnlRow[];
+  const pnlRows = (pnlRaw ?? []) as unknown as PnlRow[];
 
   // Compute monthly EBITDA (revenue - cogs - opex; we ignore D&A as a simplification)
   const monthlyData = pnlRows.map((row) => {
@@ -93,7 +84,7 @@ export default async function QoEPage({ params }: PageProps) {
   const qoeAdjustments: QoEAdjustment[] = adjustments.map((a) => ({
     id: a.id,
     periodDate: a.period_date,
-    type: a.adjustment_type,
+    type: a.adjustment_type as unknown as QoEAdjustment["type"],
     description: a.description,
     amount: a.amount,
     category: a.category,

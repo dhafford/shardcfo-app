@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { METRIC_DEFINITIONS } from "@/lib/constants";
 import type { FinancialPeriodRow, AccountRow, LineItemRow, MetricRow } from "@/lib/supabase/types";
 
@@ -10,17 +9,8 @@ import type { FinancialPeriodRow, AccountRow, LineItemRow, MetricRow } from "@/l
 // saveMetric
 // ---------------------------------------------------------------------------
 
-/**
- * Saves a manually entered metric value for a given company and period date.
- * Upserts based on (company_id, period_date, metric_key).
- */
 export async function saveMetric(formData: FormData) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth({ redirect: false });
 
   const companyId = formData.get("companyId") as string;
   const periodDate = formData.get("periodDate") as string;
@@ -41,8 +31,7 @@ export async function saveMetric(formData: FormData) {
     throw new Error(`Unknown metric key: ${metricKey}`);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from("metrics") as any).upsert(
+  const { error } = await supabase.from("metrics").upsert(
     {
       company_id: companyId,
       period_date: periodDate,
@@ -65,24 +54,14 @@ export async function saveMetric(formData: FormData) {
 // calculateAndStoreMetrics
 // ---------------------------------------------------------------------------
 
-/**
- * Derives computable SaaS metrics from line items in the financial data and
- * upserts them into the metrics table for the given company and period date.
- */
 export async function calculateAndStoreMetrics(
   companyId: string,
   periodDate: string
 ) {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { supabase } = await requireAuth({ redirect: false });
 
   // Fetch the actual financial period matching the date
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: periodRaw, error: periodError } = await (supabase as any)
+  const { data: periodRaw, error: periodError } = await supabase
     .from("financial_periods")
     .select("id, period_date")
     .eq("company_id", companyId)
@@ -99,8 +78,7 @@ export async function calculateAndStoreMetrics(
   }
 
   // Fetch all accounts for this company to identify categories
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: accountsRaw } = await (supabase as any)
+  const { data: accountsRaw } = await supabase
     .from("accounts")
     .select("id, category, subcategory")
     .eq("company_id", companyId);
@@ -112,8 +90,7 @@ export async function calculateAndStoreMetrics(
   const accountMap = new Map(accounts.map((a) => [a.id, a]));
 
   // Fetch line items for the current period
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: lineItemsRaw } = await (supabase as any)
+  const { data: lineItemsRaw } = await supabase
     .from("line_items")
     .select("account_id, amount")
     .eq("period_id", period.id);
@@ -145,8 +122,7 @@ export async function calculateAndStoreMetrics(
     revenueTotal > 0 ? grossProfit / revenueTotal : null;
 
   // Fetch existing stored metrics (to get MRR for ARR and MRR growth)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: storedMetricsRaw } = await (supabase as any)
+  const { data: storedMetricsRaw } = await supabase
     .from("metrics")
     .select("metric_key, metric_value")
     .eq("company_id", companyId)
@@ -200,8 +176,7 @@ export async function calculateAndStoreMetrics(
     source: "computed",
   }));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: upsertError } = await (supabase as any)
+  const { error: upsertError } = await supabase
     .from("metrics")
     .upsert(upsertRows, { onConflict: "company_id,period_date,metric_key" });
 

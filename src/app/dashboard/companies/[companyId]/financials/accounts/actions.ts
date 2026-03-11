@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 import { revalidatePath } from "next/cache";
 import type { AccountInsert, AccountUpdate } from "@/lib/supabase/types";
 
@@ -30,9 +30,7 @@ export async function createAccount(
   companyId: string,
   data: AccountFormData
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
+  const { supabase } = await requireAuth({ redirect: false });
 
   const insert: AccountInsert = {
     company_id: companyId,
@@ -44,8 +42,7 @@ export async function createAccount(
     is_active: true,
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: created, error } = await (supabase as any)
+  const { data: created, error } = await supabase
     .from("accounts")
     .insert(insert)
     .select("id")
@@ -54,7 +51,7 @@ export async function createAccount(
   if (error) return { success: false, error: error.message };
 
   revalidatePath(`/dashboard/companies/${companyId}/financials/accounts`);
-  return { success: true, id: (created as { id: string }).id };
+  return { success: true, id: created.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -66,9 +63,7 @@ export async function updateAccount(
   accountId: string,
   data: Partial<AccountFormData>
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
+  const { supabase } = await requireAuth({ redirect: false });
 
   const update: AccountUpdate = {
     ...(data.name !== undefined && { name: data.name.trim() }),
@@ -78,8 +73,7 @@ export async function updateAccount(
     ...(data.display_order !== undefined && { display_order: data.display_order }),
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("accounts")
     .update(update)
     .eq("id", accountId)
@@ -99,12 +93,9 @@ export async function archiveAccount(
   companyId: string,
   accountId: string
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
+  const { supabase } = await requireAuth({ redirect: false });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("accounts")
     .update({ is_active: false })
     .eq("id", accountId)
@@ -185,9 +176,7 @@ export async function initializeFromTemplate(
   companyId: string,
   template: TemplateType
 ): Promise<ActionResult & { created: number }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated.", created: 0 };
+  const { supabase } = await requireAuth({ redirect: false });
 
   const templateAccounts = TEMPLATES[template];
   if (templateAccounts.length === 0 && template !== "blank") {
@@ -195,8 +184,7 @@ export async function initializeFromTemplate(
   }
 
   // Check if accounts already exist
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count } = await (supabase as any)
+  const { count } = await supabase
     .from("accounts")
     .select("id", { count: "exact", head: true })
     .eq("company_id", companyId);
@@ -223,8 +211,7 @@ export async function initializeFromTemplate(
     is_active: true,
   }));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any).from("accounts").insert(inserts);
+  const { error } = await supabase.from("accounts").insert(inserts);
   if (error) return { success: false, error: error.message, created: 0 };
 
   revalidatePath(`/dashboard/companies/${companyId}/financials/accounts`);

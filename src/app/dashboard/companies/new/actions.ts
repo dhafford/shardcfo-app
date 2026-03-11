@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
+import type { Json } from "@/lib/supabase/types";
 
 // ─── Validation schema ─────────────────────────────────────────────────────────
 
@@ -53,13 +54,11 @@ export async function createCompany(
   _prev: CreateCompanyState,
   formData: FormData
 ): Promise<CreateCompanyState> {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  let user: Awaited<ReturnType<typeof requireAuth>>["user"];
+  let supabase: Awaited<ReturnType<typeof requireAuth>>["supabase"];
+  try {
+    ({ user, supabase } = await requireAuth({ redirect: false }));
+  } catch {
     return { message: "You must be signed in to create a company." };
   }
 
@@ -102,8 +101,8 @@ export async function createCompany(
       fiscal_year_end_month,
       currency,
       status: "active" as const,
-      metadata,
-    } as never)
+      metadata: metadata as Json,
+    })
     .select("id")
     .single();
 

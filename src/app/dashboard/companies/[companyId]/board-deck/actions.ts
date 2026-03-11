@@ -2,19 +2,13 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/supabase/require-auth"
 import { DECK_TEMPLATES } from "@/lib/constants"
 import type { Json } from "@/lib/supabase/types"
 import type { DeckSection } from "@/components/board-deck/deck-editor"
 
 export async function createDeck(formData: FormData) {
-  const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) redirect("/login")
+  const { supabase } = await requireAuth()
 
   const companyId = formData.get("companyId") as string
   const title = formData.get("title") as string
@@ -46,8 +40,7 @@ export async function createDeck(formData: FormData) {
     sections: sections as unknown as Json,
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("board_decks")
     .insert(deckInsert)
     .select("id")

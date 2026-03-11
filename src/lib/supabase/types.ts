@@ -7,7 +7,892 @@ export type Json =
   | Json[]
 
 // -------------------------------------------------------------------
-// Enum types matching CHECK constraints / Postgres enums in the schema
+// Database type — generated from Supabase schema
+// -------------------------------------------------------------------
+
+export type Database = {
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
+  }
+  public: {
+    Tables: {
+      accounts: {
+        Row: {
+          account_number: string
+          category: string
+          company_id: string
+          created_at: string
+          display_order: number | null
+          id: string
+          is_active: boolean
+          name: string
+          subcategory: string | null
+        }
+        Insert: {
+          account_number: string
+          category: string
+          company_id: string
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          is_active?: boolean
+          name: string
+          subcategory?: string | null
+        }
+        Update: {
+          account_number?: string
+          category?: string
+          company_id?: string
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          subcategory?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_log: {
+        Row: {
+          action: string
+          company_id: string | null
+          created_at: string
+          details: Json | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          company_id?: string | null
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          company_id?: string | null
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      board_decks: {
+        Row: {
+          company_id: string
+          created_at: string
+          generated_pdf_url: string | null
+          generated_pptx_url: string | null
+          id: string
+          period_end: string
+          period_start: string
+          presenter_notes: Json | null
+          sections: Json
+          status: string
+          template_key: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          generated_pdf_url?: string | null
+          generated_pptx_url?: string | null
+          id?: string
+          period_end: string
+          period_start: string
+          presenter_notes?: Json | null
+          sections?: Json
+          status?: string
+          template_key?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          generated_pdf_url?: string | null
+          generated_pptx_url?: string | null
+          id?: string
+          period_end?: string
+          period_start?: string
+          presenter_notes?: Json | null
+          sections?: Json
+          status?: string
+          template_key?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "board_decks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      companies: {
+        Row: {
+          created_at: string
+          currency: string
+          fiscal_year_end_month: number | null
+          id: string
+          industry: string | null
+          legal_entity: string | null
+          logo_url: string | null
+          metadata: Json | null
+          name: string
+          owner_id: string
+          stage: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          fiscal_year_end_month?: number | null
+          id?: string
+          industry?: string | null
+          legal_entity?: string | null
+          logo_url?: string | null
+          metadata?: Json | null
+          name: string
+          owner_id: string
+          stage?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          fiscal_year_end_month?: number | null
+          id?: string
+          industry?: string | null
+          legal_entity?: string | null
+          logo_url?: string | null
+          metadata?: Json | null
+          name?: string
+          owner_id?: string
+          stage?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "companies_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_imports: {
+        Row: {
+          company_id: string
+          created_at: string
+          error_log: Json | null
+          file_name: string
+          file_type: string
+          file_url: string
+          id: string
+          mapping_config: Json | null
+          row_count: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          error_log?: Json | null
+          file_name: string
+          file_type: string
+          file_url: string
+          id?: string
+          mapping_config?: Json | null
+          row_count?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          error_log?: Json | null
+          file_name?: string
+          file_type?: string
+          file_url?: string
+          id?: string
+          mapping_config?: Json | null
+          row_count?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_imports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      data_room_documents: {
+        Row: {
+          company_id: string
+          created_at: string
+          document_name: string
+          document_type: string | null
+          file_path: string | null
+          folder: string
+          id: string
+          notes: string | null
+          status: string
+          subfolder: string | null
+          updated_at: string
+          uploaded_at: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          document_name: string
+          document_type?: string | null
+          file_path?: string | null
+          folder: string
+          id?: string
+          notes?: string | null
+          status?: string
+          subfolder?: string | null
+          updated_at?: string
+          uploaded_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          document_name?: string
+          document_type?: string | null
+          file_path?: string | null
+          folder?: string
+          id?: string
+          notes?: string | null
+          status?: string
+          subfolder?: string | null
+          updated_at?: string
+          uploaded_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_room_documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dd_assessments: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          items: Json
+          notes: string | null
+          overall_score: number
+          stage: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          overall_score?: number
+          stage: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          overall_score?: number
+          stage?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dd_assessments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dd_findings: {
+        Row: {
+          assessment_id: string | null
+          category: string
+          company_id: string
+          created_at: string
+          description: string | null
+          id: string
+          impact: string | null
+          recommendation: string | null
+          resolved: boolean
+          resolved_at: string | null
+          severity: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assessment_id?: string | null
+          category: string
+          company_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          impact?: string | null
+          recommendation?: string | null
+          resolved?: boolean
+          resolved_at?: string | null
+          severity?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assessment_id?: string | null
+          category?: string
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          impact?: string | null
+          recommendation?: string | null
+          resolved?: boolean
+          resolved_at?: string | null
+          severity?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dd_findings_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "dd_assessments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dd_findings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dd_items: {
+        Row: {
+          assignee: string | null
+          category: string
+          company_id: string
+          created_at: string
+          data_room_path: string | null
+          description: string | null
+          document_type: string | null
+          due_date: string | null
+          id: string
+          item_name: string
+          notes: string | null
+          priority: string
+          required_stages: string[] | null
+          status: string
+          subcategory: string | null
+          updated_at: string
+        }
+        Insert: {
+          assignee?: string | null
+          category: string
+          company_id: string
+          created_at?: string
+          data_room_path?: string | null
+          description?: string | null
+          document_type?: string | null
+          due_date?: string | null
+          id?: string
+          item_name: string
+          notes?: string | null
+          priority?: string
+          required_stages?: string[] | null
+          status?: string
+          subcategory?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assignee?: string | null
+          category?: string
+          company_id?: string
+          created_at?: string
+          data_room_path?: string | null
+          description?: string | null
+          document_type?: string | null
+          due_date?: string | null
+          id?: string
+          item_name?: string
+          notes?: string | null
+          priority?: string
+          required_stages?: string[] | null
+          status?: string
+          subcategory?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dd_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_periods: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          period_date: string
+          period_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          period_date: string
+          period_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          period_date?: string
+          period_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_periods_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      line_items: {
+        Row: {
+          account_id: string
+          amount: number
+          created_at: string
+          id: string
+          notes: string | null
+          period_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          amount?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          period_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          amount?: number
+          created_at?: string
+          id?: string
+          notes?: string | null
+          period_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "line_items_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "line_items_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "financial_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metrics: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          metric_key: string
+          metric_unit: string | null
+          metric_value: number
+          period_date: string
+          source: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          metric_key: string
+          metric_unit?: string | null
+          metric_value: number
+          period_date: string
+          source?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          metric_key?: string
+          metric_unit?: string | null
+          metric_value?: number
+          period_date?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metrics_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          firm_name: string | null
+          full_name: string
+          id: string
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          firm_name?: string | null
+          full_name: string
+          id: string
+          role?: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          firm_name?: string | null
+          full_name?: string
+          id?: string
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      qoe_adjustments: {
+        Row: {
+          adjustment_type: string
+          amount: number
+          category: string | null
+          company_id: string
+          created_at: string
+          description: string
+          id: string
+          period_date: string
+          updated_at: string
+        }
+        Insert: {
+          adjustment_type: string
+          amount: number
+          category?: string | null
+          company_id: string
+          created_at?: string
+          description: string
+          id?: string
+          period_date: string
+          updated_at?: string
+        }
+        Update: {
+          adjustment_type?: string
+          amount?: number
+          category?: string | null
+          company_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          period_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qoe_adjustments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scenarios: {
+        Row: {
+          assumptions: Json
+          base_period_date: string
+          company_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          results_cache: Json | null
+          updated_at: string
+        }
+        Insert: {
+          assumptions?: Json
+          base_period_date: string
+          company_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          results_cache?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          assumptions?: Json
+          base_period_date?: string
+          company_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          results_cache?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenarios_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      calculate_runway: {
+        Args: { p_company_id: string }
+        Returns: {
+          avg_monthly_burn: number
+          calculation_date: string
+          cash_balance: number
+          months_sampled: number
+          runway_months: number
+        }[]
+      }
+      get_budget_variance: {
+        Args: { p_company_id: string; p_period_date: string }
+        Returns: {
+          account_id: string
+          account_name: string
+          account_number: string
+          actual_amount: number
+          budget_amount: number
+          category: string
+          subcategory: string
+          variance: number
+          variance_pct: number
+        }[]
+      }
+      get_cash_flow_summary: {
+        Args: { p_company_id: string; p_end_date: string; p_start_date: string }
+        Returns: {
+          account_name: string
+          account_number: string
+          amount: number
+          category: string
+          period_date: string
+          subcategory: string
+        }[]
+      }
+      get_pnl_summary: {
+        Args: {
+          p_company_id: string
+          p_end_date: string
+          p_period_type?: string
+          p_start_date: string
+        }
+        Returns: {
+          account_id: string
+          account_name: string
+          account_number: string
+          amount: number
+          category: string
+          period_date: string
+          subcategory: string
+        }[]
+      }
+      get_saas_metrics_dashboard: {
+        Args: { p_company_id: string; p_end_date: string; p_start_date: string }
+        Returns: {
+          metric_key: string
+          metric_unit: string
+          metric_value: number
+          period_date: string
+          source: string
+        }[]
+      }
+      seed_demo_data: { Args: { p_owner_id: string }; Returns: undefined }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+// -------------------------------------------------------------------
+// Row type aliases — derived from Database for query result typing
+// -------------------------------------------------------------------
+
+export type ProfileRow = Database['public']['Tables']['profiles']['Row']
+export type CompanyRow = Database['public']['Tables']['companies']['Row']
+export type FinancialPeriodRow = Database['public']['Tables']['financial_periods']['Row']
+export type AccountRow = Database['public']['Tables']['accounts']['Row']
+export type LineItemRow = Database['public']['Tables']['line_items']['Row']
+export type MetricRow = Database['public']['Tables']['metrics']['Row']
+export type BoardDeckRow = Database['public']['Tables']['board_decks']['Row']
+export type DataImportRow = Database['public']['Tables']['data_imports']['Row']
+export type ScenarioRow = Database['public']['Tables']['scenarios']['Row']
+export type AuditLogRow = Database['public']['Tables']['audit_log']['Row']
+export type DDAssessmentRow = Database['public']['Tables']['dd_assessments']['Row']
+export type DDItemRow = Database['public']['Tables']['dd_items']['Row']
+export type DataRoomDocumentRow = Database['public']['Tables']['data_room_documents']['Row']
+export type DDFindingRow = Database['public']['Tables']['dd_findings']['Row']
+export type QoEAdjustmentRow = Database['public']['Tables']['qoe_adjustments']['Row']
+
+// -------------------------------------------------------------------
+// Insert type aliases
+// -------------------------------------------------------------------
+
+export type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
+export type CompanyInsert = Database['public']['Tables']['companies']['Insert']
+export type FinancialPeriodInsert = Database['public']['Tables']['financial_periods']['Insert']
+export type AccountInsert = Database['public']['Tables']['accounts']['Insert']
+export type LineItemInsert = Database['public']['Tables']['line_items']['Insert']
+export type MetricInsert = Database['public']['Tables']['metrics']['Insert']
+export type BoardDeckInsert = Database['public']['Tables']['board_decks']['Insert']
+export type DataImportInsert = Database['public']['Tables']['data_imports']['Insert']
+export type ScenarioInsert = Database['public']['Tables']['scenarios']['Insert']
+export type AuditLogInsert = Database['public']['Tables']['audit_log']['Insert']
+export type DDAssessmentInsert = Database['public']['Tables']['dd_assessments']['Insert']
+export type DDItemInsert = Database['public']['Tables']['dd_items']['Insert']
+export type DataRoomDocumentInsert = Database['public']['Tables']['data_room_documents']['Insert']
+export type DDFindingInsert = Database['public']['Tables']['dd_findings']['Insert']
+export type QoEAdjustmentInsert = Database['public']['Tables']['qoe_adjustments']['Insert']
+
+// -------------------------------------------------------------------
+// Update type aliases
+// -------------------------------------------------------------------
+
+export type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
+export type CompanyUpdate = Database['public']['Tables']['companies']['Update']
+export type FinancialPeriodUpdate = Database['public']['Tables']['financial_periods']['Update']
+export type AccountUpdate = Database['public']['Tables']['accounts']['Update']
+export type LineItemUpdate = Database['public']['Tables']['line_items']['Update']
+export type MetricUpdate = Database['public']['Tables']['metrics']['Update']
+export type BoardDeckUpdate = Database['public']['Tables']['board_decks']['Update']
+export type DataImportUpdate = Database['public']['Tables']['data_imports']['Update']
+export type ScenarioUpdate = Database['public']['Tables']['scenarios']['Update']
+export type AuditLogUpdate = Database['public']['Tables']['audit_log']['Update']
+export type DDAssessmentUpdate = Database['public']['Tables']['dd_assessments']['Update']
+export type DDItemUpdate = Database['public']['Tables']['dd_items']['Update']
+export type DataRoomDocumentUpdate = Database['public']['Tables']['data_room_documents']['Update']
+export type DDFindingUpdate = Database['public']['Tables']['dd_findings']['Update']
+export type QoEAdjustmentUpdate = Database['public']['Tables']['qoe_adjustments']['Update']
+
+// -------------------------------------------------------------------
+// Convenience type helpers
+// -------------------------------------------------------------------
+
+export type TableRow<T extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][T]['Row']
+
+export type TableInsert<T extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][T]['Insert']
+
+export type TableUpdate<T extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][T]['Update']
+
+// -------------------------------------------------------------------
+// Application-layer enum types (for validation, not DB schema)
 // -------------------------------------------------------------------
 
 export type UserRole = 'cfo' | 'admin' | 'viewer'
@@ -40,408 +925,7 @@ export type ImportSource = 'csv' | 'excel' | 'quickbooks' | 'xero' | 'manual'
 export type ScenarioType = 'base' | 'upside' | 'downside' | 'custom'
 export type AuditAction = 'insert' | 'update' | 'delete' | 'login' | 'logout' | 'export'
 
-// -------------------------------------------------------------------
-// Row types — what SELECT queries return
-// -------------------------------------------------------------------
-
-export interface ProfileRow {
-  id: string
-  full_name: string
-  email: string
-  avatar_url: string | null
-  role: UserRole
-  firm_name: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface CompanyRow {
-  id: string
-  owner_id: string
-  name: string
-  legal_entity: string | null
-  industry: string | null
-  stage: string | null
-  fiscal_year_end_month: number
-  currency: string
-  logo_url: string | null
-  status: CompanyStatus
-  metadata: Json | null
-  created_at: string
-  updated_at: string
-}
-
-export interface FinancialPeriodRow {
-  id: string
-  company_id: string
-  period_date: string
-  period_type: string
-  status: string
-  created_at: string
-  updated_at: string
-}
-
-export interface AccountRow {
-  id: string
-  company_id: string
-  account_number: string
-  name: string
-  category: string
-  subcategory: string | null
-  is_active: boolean
-  display_order: number
-  created_at: string
-}
-
-export interface LineItemRow {
-  id: string
-  period_id: string
-  account_id: string
-  amount: number
-  notes: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface MetricRow {
-  id: string
-  company_id: string
-  period_date: string
-  metric_key: string
-  metric_value: number
-  metric_unit: string | null
-  source: string | null
-  created_at: string
-}
-
-export interface BoardDeckRow {
-  id: string
-  company_id: string
-  title: string
-  period_start: string
-  period_end: string
-  status: string
-  template_key: string
-  sections: Json
-  generated_pdf_url: string | null
-  generated_pptx_url: string | null
-  presenter_notes: Json
-  created_at: string
-  updated_at: string
-}
-
-export interface DataImportRow {
-  id: string
-  company_id: string
-  file_name: string
-  file_url: string
-  file_type: string
-  status: string
-  row_count: number | null
-  mapping_config: Json
-  error_log: Json
-  created_at: string
-  updated_at: string
-}
-
-export interface ScenarioRow {
-  id: string
-  company_id: string
-  name: string
-  description: string | null
-  base_period_date: string
-  assumptions: Json
-  results_cache: Json
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface AuditLogRow {
-  id: string
-  user_id: string | null
-  company_id: string | null
-  action: string
-  entity_type: string
-  entity_id: string | null
-  details: Json
-  created_at: string
-}
-
-// -------------------------------------------------------------------
-// Insert types — fields required / optional when inserting a new row
-// -------------------------------------------------------------------
-
-export interface ProfileInsert {
-  id: string
-  full_name: string
-  email: string
-  avatar_url?: string | null
-  role?: UserRole
-  firm_name?: string | null
-  created_at?: string
-  updated_at?: string
-}
-
-export interface CompanyInsert {
-  id?: string
-  name: string
-  owner_id: string
-  legal_entity?: string | null
-  industry?: string | null
-  stage?: string | null
-  fiscal_year_end_month?: number
-  currency?: string
-  logo_url?: string | null
-  status?: CompanyStatus
-  metadata?: Json | null
-  created_at?: string
-  updated_at?: string
-}
-
-export interface FinancialPeriodInsert {
-  id?: string
-  company_id: string
-  period_date: string
-  period_type?: string
-  status?: string
-  created_at?: string
-  updated_at?: string
-}
-
-export interface AccountInsert {
-  id?: string
-  company_id: string
-  account_number: string
-  name: string
-  category: string
-  subcategory?: string | null
-  is_active?: boolean
-  display_order?: number
-  created_at?: string
-}
-
-export interface LineItemInsert {
-  id?: string
-  period_id: string
-  account_id: string
-  amount: number
-  notes?: string | null
-  created_at?: string
-  updated_at?: string
-}
-
-export interface MetricInsert {
-  id?: string
-  company_id: string
-  period_date: string
-  metric_key: string
-  metric_value: number
-  metric_unit?: string | null
-  source?: string | null
-  created_at?: string
-}
-
-export interface BoardDeckInsert {
-  id?: string
-  company_id: string
-  title: string
-  period_start: string
-  period_end: string
-  status?: string
-  template_key?: string
-  sections?: Json
-  generated_pdf_url?: string | null
-  generated_pptx_url?: string | null
-  presenter_notes?: Json
-  created_at?: string
-  updated_at?: string
-}
-
-export interface DataImportInsert {
-  id?: string
-  company_id: string
-  file_name: string
-  file_url: string
-  file_type: string
-  status?: string
-  row_count?: number | null
-  mapping_config?: Json
-  error_log?: Json
-  created_at?: string
-  updated_at?: string
-}
-
-export interface ScenarioInsert {
-  id?: string
-  company_id: string
-  name: string
-  description?: string | null
-  base_period_date: string
-  assumptions?: Json
-  results_cache?: Json
-  is_active?: boolean
-  created_at?: string
-  updated_at?: string
-}
-
-export interface AuditLogInsert {
-  id?: string
-  user_id?: string | null
-  company_id?: string | null
-  action: string
-  entity_type: string
-  entity_id?: string | null
-  details?: Json
-  created_at?: string
-}
-
-// -------------------------------------------------------------------
-// Update types — all fields optional for PATCH-style updates
-// -------------------------------------------------------------------
-
-export type ProfileUpdate = Partial<Omit<ProfileInsert, 'id'>>
-export type CompanyUpdate = Partial<CompanyInsert>
-export type FinancialPeriodUpdate = Partial<FinancialPeriodInsert>
-export type AccountUpdate = Partial<AccountInsert>
-export type LineItemUpdate = Partial<LineItemInsert>
-export type MetricUpdate = Partial<MetricInsert>
-export type BoardDeckUpdate = Partial<BoardDeckInsert>
-export type DataImportUpdate = Partial<DataImportInsert>
-export type ScenarioUpdate = Partial<ScenarioInsert>
-// audit_log is append-only; no update type needed
-
-// -------------------------------------------------------------------
-// Database type — Supabase generated-types shape
-// -------------------------------------------------------------------
-
-export interface Database {
-  public: {
-    Tables: {
-      profiles: {
-        Row: ProfileRow
-        Insert: ProfileInsert
-        Update: ProfileUpdate
-        Relationships: []
-      }
-      companies: {
-        Row: CompanyRow
-        Insert: CompanyInsert
-        Update: CompanyUpdate
-        Relationships: [
-          {
-            foreignKeyName: 'companies_owner_id_fkey'
-            columns: ['owner_id']
-            isOneToOne: false
-            referencedRelation: 'accounts'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      line_items: {
-        Row: LineItemRow
-        Insert: LineItemInsert
-        Update: LineItemUpdate
-        Relationships: []
-      }
-      metrics: {
-        Row: MetricRow
-        Insert: MetricInsert
-        Update: MetricUpdate
-        Relationships: []
-      }
-      board_decks: {
-        Row: BoardDeckRow
-        Insert: BoardDeckInsert
-        Update: BoardDeckUpdate
-        Relationships: []
-      }
-      data_imports: {
-        Row: DataImportRow
-        Insert: DataImportInsert
-        Update: DataImportUpdate
-        Relationships: []
-      }
-      scenarios: {
-        Row: ScenarioRow
-        Insert: ScenarioInsert
-        Update: ScenarioUpdate
-        Relationships: []
-      }
-      audit_log: {
-        Row: AuditLogRow
-        Insert: AuditLogInsert
-        Update: never
-        Relationships: []
-      }
-      dd_assessments: {
-        Row: DDAssessmentRow
-        Insert: DDAssessmentInsert
-        Update: DDAssessmentUpdate
-        Relationships: []
-      }
-      dd_items: {
-        Row: DDItemRow
-        Insert: DDItemInsert
-        Update: DDItemUpdate
-        Relationships: []
-      }
-      data_room_documents: {
-        Row: DataRoomDocumentRow
-        Insert: DataRoomDocumentInsert
-        Update: DataRoomDocumentUpdate
-        Relationships: []
-      }
-      dd_findings: {
-        Row: DDFindingRow
-        Insert: DDFindingInsert
-        Update: DDFindingUpdate
-        Relationships: []
-      }
-      qoe_adjustments: {
-        Row: QoEAdjustmentRow
-        Insert: QoEAdjustmentInsert
-        Update: QoEAdjustmentUpdate
-        Relationships: []
-      }
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      [_ in never]: never
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-}
-
-// -------------------------------------------------------------------
-// Convenience type aliases
-// -------------------------------------------------------------------
-
-type Tables<T extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][T]
-
-export type TableRow<T extends keyof Database['public']['Tables']> =
-  Tables<T>['Row']
-
-export type TableInsert<T extends keyof Database['public']['Tables']> =
-  Tables<T>['Insert']
-
-export type TableUpdate<T extends keyof Database['public']['Tables']> =
-  Tables<T>['Update']
-
-// -------------------------------------------------------------------
-// Due Diligence types
-// -------------------------------------------------------------------
-
 export type DDStage = 'seed' | 'series_a' | 'series_b' | 'series_c' | 'growth'
-
 export type DDCategory =
   | 'corporate'
   | 'financial'
@@ -450,13 +934,11 @@ export type DDCategory =
   | 'hr'
   | 'product_tech'
   | 'fundraising'
-
 export type DDItemStatus = 'not_started' | 'in_progress' | 'complete' | 'not_applicable'
 export type DDPriority = 'critical' | 'high' | 'medium' | 'low'
 export type DDSeverity = 'critical' | 'significant' | 'moderate' | 'observation'
 export type DDDocumentType = 'pdf' | 'excel' | 'csv' | 'contract' | 'other'
 export type DataRoomDocStatus = 'pending' | 'uploaded' | 'verified' | 'needs_update'
-
 export type QoEAdjustmentType =
   | 'non_recurring'
   | 'non_operating'
@@ -464,158 +946,3 @@ export type QoEAdjustmentType =
   | 'owner_discretionary'
   | 'related_party'
   | 'run_rate'
-
-export interface DDAssessmentRow {
-  id: string
-  company_id: string
-  stage: DDStage
-  overall_score: number
-  items: Json
-  notes: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface DDItemRow {
-  id: string
-  company_id: string
-  category: DDCategory
-  subcategory: string | null
-  item_name: string
-  description: string | null
-  required_stages: string[]
-  document_type: DDDocumentType | null
-  status: DDItemStatus
-  assignee: string | null
-  due_date: string | null
-  priority: DDPriority
-  notes: string | null
-  data_room_path: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface DataRoomDocumentRow {
-  id: string
-  company_id: string
-  folder: string
-  subfolder: string | null
-  document_name: string
-  document_type: DDDocumentType | null
-  file_path: string | null
-  status: DataRoomDocStatus
-  notes: string | null
-  uploaded_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface DDFindingRow {
-  id: string
-  company_id: string
-  assessment_id: string | null
-  category: string
-  title: string
-  description: string | null
-  severity: DDSeverity
-  impact: string | null
-  recommendation: string | null
-  resolved: boolean
-  resolved_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface QoEAdjustmentRow {
-  id: string
-  company_id: string
-  period_date: string
-  adjustment_type: QoEAdjustmentType
-  description: string
-  amount: number
-  category: string | null
-  created_at: string
-  updated_at: string
-}
-
-// Insert types for diligence tables
-
-export interface DDAssessmentInsert {
-  id?: string
-  company_id: string
-  stage: DDStage
-  overall_score?: number
-  items?: Json
-  notes?: string | null
-  created_at?: string
-  updated_at?: string
-}
-
-export interface DDItemInsert {
-  id?: string
-  company_id: string
-  category: DDCategory
-  subcategory?: string | null
-  item_name: string
-  description?: string | null
-  required_stages?: string[]
-  document_type?: DDDocumentType | null
-  status?: DDItemStatus
-  assignee?: string | null
-  due_date?: string | null
-  priority?: DDPriority
-  notes?: string | null
-  data_room_path?: string | null
-  created_at?: string
-  updated_at?: string
-}
-
-export interface DataRoomDocumentInsert {
-  id?: string
-  company_id: string
-  folder: string
-  subfolder?: string | null
-  document_name: string
-  document_type?: DDDocumentType | null
-  file_path?: string | null
-  status?: DataRoomDocStatus
-  notes?: string | null
-  uploaded_at?: string | null
-  created_at?: string
-  updated_at?: string
-}
-
-export interface DDFindingInsert {
-  id?: string
-  company_id: string
-  assessment_id?: string | null
-  category: string
-  title: string
-  description?: string | null
-  severity?: DDSeverity
-  impact?: string | null
-  recommendation?: string | null
-  resolved?: boolean
-  resolved_at?: string | null
-  created_at?: string
-  updated_at?: string
-}
-
-export interface QoEAdjustmentInsert {
-  id?: string
-  company_id: string
-  period_date: string
-  adjustment_type: QoEAdjustmentType
-  description: string
-  amount: number
-  category?: string | null
-  created_at?: string
-  updated_at?: string
-}
-
-// Update types for diligence tables
-export type DDAssessmentUpdate = Partial<DDAssessmentInsert>
-export type DDItemUpdate = Partial<DDItemInsert>
-export type DataRoomDocumentUpdate = Partial<DataRoomDocumentInsert>
-export type DDFindingUpdate = Partial<DDFindingInsert>
-export type QoEAdjustmentUpdate = Partial<QoEAdjustmentInsert>

@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 
 export interface UpdateProfileState {
   error?: string;
@@ -15,13 +15,11 @@ export async function updateProfile(
   _prev: UpdateProfileState,
   formData: FormData
 ): Promise<UpdateProfileState> {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  let user: Awaited<ReturnType<typeof requireAuth>>["user"];
+  let supabase: Awaited<ReturnType<typeof requireAuth>>["supabase"];
+  try {
+    ({ user, supabase } = await requireAuth({ redirect: false }));
+  } catch {
     return { error: "You must be signed in." };
   }
 
@@ -40,7 +38,7 @@ export async function updateProfile(
     .update({
       full_name,
       firm_name: firm_name || null,
-    } as never)
+    })
     .eq("id", user.id);
 
   if (profileError) {

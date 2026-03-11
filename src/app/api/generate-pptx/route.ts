@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/supabase/require-auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    let supabase: Awaited<ReturnType<typeof requireAuth>>["supabase"];
+    try {
+      ({ supabase } = await requireAuth({ redirect: false }));
+    } catch {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -24,8 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch deck data
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: deckRaw, error: deckError } = await (supabase as any)
+    const { data: deckRaw, error: deckError } = await supabase
       .from("board_decks")
       .select(
         `

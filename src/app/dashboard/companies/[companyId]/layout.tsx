@@ -10,7 +10,7 @@ interface CompanyLayoutProps {
 }
 
 const statusBadgeVariant: Record<
-  CompanyStatus,
+  string,
   "default" | "secondary" | "outline"
 > = {
   active: "default",
