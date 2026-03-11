@@ -33,46 +33,43 @@ export async function updateCompany(formData: FormData) {
   const currency = (formData.get("currency") as string) || null;
   const foundedYearRaw = formData.get("foundedYear") as string | null;
 
-  // Fetch existing settings to merge (not overwrite) the JSONB
+  // Fetch existing metadata to merge (not overwrite) the JSONB
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("companies")
-    .select("settings")
+    .select("metadata, legal_entity, stage")
     .eq("id", companyId)
     .single();
 
-  const existingSettings =
-    (existing?.settings as Record<string, unknown>) ?? {};
+  const existingMetadata =
+    (existing?.metadata as Record<string, unknown>) ?? {};
 
-  // Merge new settings fields from form
+  // Merge new metadata fields from form
   const fundingStage = formData.get("fundingStage") as string | null;
   const legalEntity = formData.get("legalEntity") as string | null;
 
-  const updatedSettings: Record<string, unknown> = {
-    ...existingSettings,
-    ...(fundingStage && { funding_stage: fundingStage }),
-    ...(legalEntity !== null && { legal_entity: legalEntity }),
-  };
+  if (foundedYearRaw) {
+    const year = parseInt(foundedYearRaw, 10);
+    if (year >= 1900 && year <= new Date().getFullYear() + 1) {
+      existingMetadata.founded_year = year;
+    }
+  }
+  if (fundingStage) existingMetadata.funding_stage = fundingStage;
 
   const updates: Record<string, unknown> = {
-    settings: updatedSettings,
+    metadata: existingMetadata,
   };
 
   if (name) updates.name = name;
   if (industry !== null) updates.industry = industry;
   if (currency) updates.currency = currency;
+  if (legalEntity !== null) updates.legal_entity = legalEntity;
+  if (fundingStage) updates.stage = fundingStage;
 
   if (fiscalYearEndMonthRaw) {
     const month = parseInt(fiscalYearEndMonthRaw, 10);
     if (month >= 1 && month <= 12) {
       updates.fiscal_year_end_month = month;
-    }
-  }
-
-  if (foundedYearRaw) {
-    const year = parseInt(foundedYearRaw, 10);
-    if (year >= 1900 && year <= new Date().getFullYear() + 1) {
-      updates.founded_year = year;
     }
   }
 
@@ -141,18 +138,24 @@ export async function archiveCompany(formData: FormData) {
 async function assertEditAccess(supabase: any, userId: string, companyId: string) {
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, company_id")
-    .eq("user_id", userId)
+    .select("role")
+    .eq("id", userId)
     .single();
 
   if (!profile) throw new Error("Profile not found");
 
   const role = profile.role as UserRole;
-  if (role === "admin") return; // admins can edit any company
   if (role === "viewer") throw new Error("Viewers may not edit company settings");
-  if (profile.company_id !== companyId) {
-    throw new Error("You do not have access to this company");
-  }
+
+  // Verify user owns this company
+  const { data: company } = await supabase
+    .from("companies")
+    .select("id")
+    .eq("id", companyId)
+    .eq("owner_id", userId)
+    .single();
+
+  if (!company) throw new Error("You do not have access to this company");
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -160,7 +163,7 @@ async function assertAdminAccess(supabase: any, userId: string) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
-    .eq("user_id", userId)
+    .eq("id", userId)
     .single();
 
   if (!profile || profile.role !== "admin") {

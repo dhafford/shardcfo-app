@@ -84,37 +84,25 @@ export async function createCompany(
   const { name, industry, fiscal_year_end_month, currency, founded_year } =
     parsed.data;
 
-  // Build a unique slug
-  let slug = slugify(name);
-  const { data: existingRaw } = await supabase
-    .from("companies")
-    .select("slug")
-    .like("slug", `${slug}%`)
-    .order("slug", { ascending: true });
-
-  const existing = (existingRaw ?? []) as { slug: string }[];
-  if (existing.length > 0) {
-    slug = `${slug}-${existing.length + 1}`;
-  }
-
-  // Build settings with extra fields not in the schema
-  const settings: Record<string, string | undefined> = {};
   const legalEntity = parsed.data.legal_entity;
   const stage = parsed.data.stage;
-  if (legalEntity) settings["legal_entity"] = legalEntity;
-  if (stage) settings["stage"] = stage;
+
+  // Store founded_year in metadata JSONB (not a column on companies)
+  const metadata: Record<string, unknown> = {};
+  if (founded_year) metadata.founded_year = founded_year;
 
   const { data: companyRaw, error } = await supabase
     .from("companies")
     .insert({
       name,
-      slug,
+      owner_id: user.id,
+      legal_entity: legalEntity ?? null,
       industry: industry ?? null,
+      stage: stage ?? null,
       fiscal_year_end_month,
       currency,
-      founded_year: founded_year ?? null,
       status: "active" as const,
-      settings,
+      metadata,
     } as never)
     .select("id")
     .single();

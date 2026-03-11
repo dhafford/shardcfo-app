@@ -39,22 +39,15 @@ export async function updateProfile(
     .from("profiles")
     .update({
       full_name,
-      updated_at: new Date().toISOString(),
+      firm_name: firm_name || null,
     } as never)
-    .eq("user_id", user.id);
+    .eq("id", user.id);
 
   if (profileError) {
     return {
       error: profileError.message,
       fields: { full_name, firm_name },
     };
-  }
-
-  // Store firm_name in Supabase auth user_metadata (no dedicated column)
-  if (firm_name) {
-    await supabase.auth.updateUser({
-      data: { firm_name },
-    });
   }
 
   return { success: true };
