@@ -1,0 +1,67 @@
+import { notFound, redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { DeckEditor } from "@/components/board-deck/deck-editor";
+import type { DeckSection } from "@/components/board-deck/deck-editor";
+
+// ---------------------------------------------------------------------------
+// Page — Server Component wrapper for the deck editor
+// ---------------------------------------------------------------------------
+
+interface PageProps {
+  params: Promise<{ companyId: string; deckId: string }>;
+}
+
+export default async function DeckEditorPage({ params }: PageProps) {
+  const { companyId, deckId } = await params;
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Fetch deck and company in parallel
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any
+  const [{ data: deck }, { data: company }] = await Promise.all([
+    db
+      .from("board_decks")
+      .select("*")
+      .eq("id", deckId)
+      .eq("company_id", companyId)
+      .single(),
+    db.from("companies").select("*").eq("id", companyId).single(),
+  ]);
+
+  if (!deck || !company) {
+    notFound();
+  }
+
+  // Parse sections from deck content
+  const content = (deck.content as Record<string, unknown>) ?? {};
+  const rawSections = Array.isArray(content.sections) ? content.sections : [];
+
+  const initialSections: DeckSection[] = rawSections.map((s, i) => {
+    const section = s as Record<string, unknown>;
+    return {
+      id: (section.id as string) || crypto.randomUUID(),
+      type: (section.type as string) || "title_slide",
+      config: (section.config as Record<string, unknown>) || {},
+      order: typeof section.order === "number" ? section.order : i,
+    };
+  });
+
+  return (
+    // The deck editor fills all available height — the company layout's
+    // scrollable wrapper provides the outer container.
+    <div className="h-full">
+      <DeckEditor
+        deck={deck}
+        company={company}
+        initialSections={initialSections}
+      />
+    </div>
+  );
+}
+
+export const dynamic = "force-dynamic";
