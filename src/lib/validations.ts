@@ -285,3 +285,107 @@ export const BOARD_DECK_SECTION_OPTIONS = BOARD_DECK_SECTIONS.map((s) => ({
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" "),
 }));
+
+// ---------------------------------------------------------------------------
+// Due Diligence
+// ---------------------------------------------------------------------------
+
+const DD_CATEGORIES = [
+  "corporate",
+  "financial",
+  "tax",
+  "legal",
+  "hr",
+  "product_tech",
+  "fundraising",
+] as const;
+
+const DD_PRIORITIES = ["critical", "high", "medium", "low"] as const;
+
+const DD_ITEM_STATUSES = [
+  "not_started",
+  "in_progress",
+  "complete",
+  "not_applicable",
+] as const;
+
+const DD_SEVERITIES = [
+  "critical",
+  "significant",
+  "moderate",
+  "observation",
+] as const;
+
+const DD_DOC_TYPES = ["pdf", "excel", "csv", "contract", "other"] as const;
+
+const QOE_ADJUSTMENT_TYPES_ENUM = [
+  "non_recurring",
+  "non_operating",
+  "out_of_period",
+  "owner_discretionary",
+  "related_party",
+  "run_rate",
+] as const;
+
+export const CreateDDItemSchema = z.object({
+  category: z.enum(DD_CATEGORIES),
+  subcategory: z.string().max(200).optional(),
+  item_name: z.string().min(1, "Item name is required").max(500),
+  description: z.string().max(2000).optional(),
+  priority: z.enum(DD_PRIORITIES).default("medium"),
+  status: z.enum(DD_ITEM_STATUSES).default("not_started"),
+  assignee: z.string().max(200).optional(),
+  due_date: z.string().optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+export type CreateDDItemInput = z.infer<typeof CreateDDItemSchema>;
+
+export const CreateDDFindingSchema = z.object({
+  category: z.string().min(1, "Category is required").max(200),
+  title: z.string().min(1, "Title is required").max(500),
+  description: z.string().max(5000).optional(),
+  severity: z.enum(DD_SEVERITIES).default("observation"),
+  impact: z.string().max(2000).optional(),
+  recommendation: z.string().max(2000).optional(),
+});
+
+export type CreateDDFindingInput = z.infer<typeof CreateDDFindingSchema>;
+
+export const CreateDataRoomDocSchema = z.object({
+  folder: z.string().min(1, "Folder is required"),
+  subfolder: z.string().optional(),
+  document_name: z.string().min(1, "Document name is required").max(200),
+  document_type: z.enum(DD_DOC_TYPES).optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+export type CreateDataRoomDocInput = z.infer<typeof CreateDataRoomDocSchema>;
+
+export const CreateQoEAdjustmentSchema = z.object({
+  period_date: z.string().min(1, "Period is required"),
+  adjustment_type: z.enum(QOE_ADJUSTMENT_TYPES_ENUM),
+  description: z.string().min(1, "Description is required").max(1000),
+  amount: z.number({ message: "Amount is required" }),
+  category: z.string().max(200).optional(),
+});
+
+export type CreateQoEAdjustmentInput = z.infer<typeof CreateQoEAdjustmentSchema>;
+
+export const DD_CATEGORY_OPTIONS = DD_CATEGORIES.map((c) => ({
+  value: c,
+  label: c
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" "),
+}));
+
+export const DD_PRIORITY_OPTIONS = DD_PRIORITIES.map((p) => ({
+  value: p,
+  label: p.charAt(0).toUpperCase() + p.slice(1),
+}));
+
+export const DD_SEVERITY_OPTIONS = DD_SEVERITIES.map((s) => ({
+  value: s,
+  label: s.charAt(0).toUpperCase() + s.slice(1),
+}));

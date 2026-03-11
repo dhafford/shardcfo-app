@@ -435,3 +435,187 @@ export type TableInsert<T extends keyof Database['public']['Tables']> =
 
 export type TableUpdate<T extends keyof Database['public']['Tables']> =
   Tables<T>['Update']
+
+// -------------------------------------------------------------------
+// Due Diligence types
+// -------------------------------------------------------------------
+
+export type DDStage = 'seed' | 'series_a' | 'series_b' | 'series_c' | 'growth'
+
+export type DDCategory =
+  | 'corporate'
+  | 'financial'
+  | 'tax'
+  | 'legal'
+  | 'hr'
+  | 'product_tech'
+  | 'fundraising'
+
+export type DDItemStatus = 'not_started' | 'in_progress' | 'complete' | 'not_applicable'
+export type DDPriority = 'critical' | 'high' | 'medium' | 'low'
+export type DDSeverity = 'critical' | 'significant' | 'moderate' | 'observation'
+export type DDDocumentType = 'pdf' | 'excel' | 'csv' | 'contract' | 'other'
+export type DataRoomDocStatus = 'pending' | 'uploaded' | 'verified' | 'needs_update'
+
+export type QoEAdjustmentType =
+  | 'non_recurring'
+  | 'non_operating'
+  | 'out_of_period'
+  | 'owner_discretionary'
+  | 'related_party'
+  | 'run_rate'
+
+export interface DDAssessmentRow {
+  id: string
+  company_id: string
+  stage: DDStage
+  overall_score: number
+  items: Json
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DDItemRow {
+  id: string
+  company_id: string
+  category: DDCategory
+  subcategory: string | null
+  item_name: string
+  description: string | null
+  required_stages: string[]
+  document_type: DDDocumentType | null
+  status: DDItemStatus
+  assignee: string | null
+  due_date: string | null
+  priority: DDPriority
+  notes: string | null
+  data_room_path: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DataRoomDocumentRow {
+  id: string
+  company_id: string
+  folder: string
+  subfolder: string | null
+  document_name: string
+  document_type: DDDocumentType | null
+  file_path: string | null
+  status: DataRoomDocStatus
+  notes: string | null
+  uploaded_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DDFindingRow {
+  id: string
+  company_id: string
+  assessment_id: string | null
+  category: string
+  title: string
+  description: string | null
+  severity: DDSeverity
+  impact: string | null
+  recommendation: string | null
+  resolved: boolean
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface QoEAdjustmentRow {
+  id: string
+  company_id: string
+  period_date: string
+  adjustment_type: QoEAdjustmentType
+  description: string
+  amount: number
+  category: string | null
+  created_at: string
+  updated_at: string
+}
+
+// Insert types for diligence tables
+
+export interface DDAssessmentInsert {
+  id?: string
+  company_id: string
+  stage: DDStage
+  overall_score?: number
+  items?: Json
+  notes?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface DDItemInsert {
+  id?: string
+  company_id: string
+  category: DDCategory
+  subcategory?: string | null
+  item_name: string
+  description?: string | null
+  required_stages?: string[]
+  document_type?: DDDocumentType | null
+  status?: DDItemStatus
+  assignee?: string | null
+  due_date?: string | null
+  priority?: DDPriority
+  notes?: string | null
+  data_room_path?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface DataRoomDocumentInsert {
+  id?: string
+  company_id: string
+  folder: string
+  subfolder?: string | null
+  document_name: string
+  document_type?: DDDocumentType | null
+  file_path?: string | null
+  status?: DataRoomDocStatus
+  notes?: string | null
+  uploaded_at?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface DDFindingInsert {
+  id?: string
+  company_id: string
+  assessment_id?: string | null
+  category: string
+  title: string
+  description?: string | null
+  severity?: DDSeverity
+  impact?: string | null
+  recommendation?: string | null
+  resolved?: boolean
+  resolved_at?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface QoEAdjustmentInsert {
+  id?: string
+  company_id: string
+  period_date: string
+  adjustment_type: QoEAdjustmentType
+  description: string
+  amount: number
+  category?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+// Update types for diligence tables
+export type DDAssessmentUpdate = Partial<DDAssessmentInsert>
+export type DDItemUpdate = Partial<DDItemInsert>
+export type DataRoomDocumentUpdate = Partial<DataRoomDocumentInsert>
+export type DDFindingUpdate = Partial<DDFindingInsert>
+export type QoEAdjustmentUpdate = Partial<QoEAdjustmentInsert>
