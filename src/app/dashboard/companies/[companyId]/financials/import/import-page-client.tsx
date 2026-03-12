@@ -7,13 +7,15 @@ import type { AccountRow } from "@/lib/supabase/types";
 interface ImportPageClientProps {
   companyId: string;
   accounts: AccountRow[];
+  industry: string | null;
 }
 
-export function ImportPageClient({ companyId, accounts }: ImportPageClientProps) {
+export function ImportPageClient({ companyId, accounts, industry }: ImportPageClientProps) {
   return (
     <DataImportWizard
       companyId={companyId}
       accounts={accounts}
+      industry={industry}
       onImport={processImport}
     />
   );

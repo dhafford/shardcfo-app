@@ -35,6 +35,8 @@ import { detectColumns } from "@/lib/import/csv-parser";
 import { validateData } from "@/lib/import/csv-parser";
 import { parseQuickBooksReport } from "@/lib/import/quickbooks-parser";
 import { parseXeroReport } from "@/lib/import/xero-parser";
+import { organizeIntoTemplate, type ReviewLineItem, type OrganizedStatement } from "@/lib/import/industry-templates";
+import { ImportTemplateReview } from "@/components/financials/import-template-review";
 import type { AccountRow } from "@/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
@@ -53,7 +55,7 @@ const IMPORT_SOURCES: { value: ImportSource; label: string; description: string 
 // Types
 // ---------------------------------------------------------------------------
 
-export type WizardStep = "upload" | "preview" | "mapping" | "import";
+export type WizardStep = "upload" | "preview" | "mapping" | "review" | "import";
 
 interface ParsedFile {
   name: string;
@@ -84,6 +86,7 @@ const APP_FIELDS = [
 interface DataImportWizardProps {
   companyId: string;
   accounts: AccountRow[];
+  industry: string | null;
   onImport: (data: {
     rows: Record<string, string>[];
     mapping: ColumnMapping;
@@ -100,6 +103,7 @@ const STEPS: { key: WizardStep; label: string }[] = [
   { key: "upload", label: "Upload" },
   { key: "preview", label: "Preview" },
   { key: "mapping", label: "Mapping" },
+  { key: "review", label: "Review" },
   { key: "import", label: "Import" },
 ];
 
@@ -208,6 +212,7 @@ function FileDropZone({
 export function DataImportWizard({
   companyId,
   accounts: _accounts,
+  industry,
   onImport,
   className,
 }: DataImportWizardProps) {
@@ -220,6 +225,8 @@ export function DataImportWizard({
   const [columnMapping, setColumnMapping] = React.useState<ColumnMapping>({});
   const [validationErrors, setValidationErrors] = React.useState<string[]>([]);
   const [validationWarnings, setValidationWarnings] = React.useState<string[]>([]);
+  const [organizedData, setOrganizedData] = React.useState<OrganizedStatement | null>(null);
+  const [approvedItems, setApprovedItems] = React.useState<ReviewLineItem[] | null>(null);
   const [importState, setImportState] = React.useState<{
     running: boolean;
     progress: number;
@@ -318,14 +325,82 @@ export function DataImportWizard({
     setStep("mapping");
   };
 
-  const goToImport = () => {
+  const goToReview = () => {
     if (!parsedFile) return;
     const validation = validateData(parsedFile.rows, columnMapping);
     setValidationErrors(validation.errors);
     setValidationWarnings(validation.warnings);
     if (validation.isValid) {
-      setStep("import");
+      // Organize data into template sections for review
+      const organized = organizeIntoTemplate({
+        rows: parsedFile.rows,
+        mapping: columnMapping,
+        industry,
+      });
+      setOrganizedData(organized);
+      setStep("review");
     }
+  };
+
+  const handleReviewApprove = (items: ReviewLineItem[]) => {
+    setApprovedItems(items);
+
+    // Update rows with user-approved categories before import
+    if (parsedFile) {
+      const reverseMap: Record<string, string> = {};
+      for (const [header, field] of Object.entries(columnMapping)) {
+        if (field) reverseMap[field] = header;
+      }
+
+      const accountTypeHeader = reverseMap["account_type"];
+      const accountNameHeader = reverseMap["account_name"];
+      const accountCodeHeader = reverseMap["account_code"];
+
+      // Build a lookup from account key → approved category
+      const categoryLookup = new Map<string, string>();
+      for (const item of items) {
+        categoryLookup.set(item.key, item.category);
+      }
+
+      // Create a set of approved row indices
+      const approvedRowIndices = new Set<number>();
+      for (const item of items) {
+        for (const idx of item.rowIndices) {
+          approvedRowIndices.add(idx);
+        }
+      }
+
+      // Filter rows to only approved items, and update categories
+      const updatedRows = parsedFile.rows.filter((_, i) => approvedRowIndices.has(i));
+
+      // If there's an account_type header, update category values
+      if (accountTypeHeader) {
+        for (const row of updatedRows) {
+          const name = (accountNameHeader ? row[accountNameHeader] : "").trim();
+          const code = (accountCodeHeader ? row[accountCodeHeader] : "").trim();
+          const key = (name || code).toLowerCase().replace(/\s+/g, " ");
+          const approvedCategory = categoryLookup.get(key);
+          if (approvedCategory) {
+            row[accountTypeHeader] = approvedCategory;
+          }
+        }
+      } else {
+        // No account_type column — add one via a virtual header
+        const newHeader = "__approved_category__";
+        for (const row of updatedRows) {
+          const name = (accountNameHeader ? row[accountNameHeader] : "").trim();
+          const code = (accountCodeHeader ? row[accountCodeHeader] : "").trim();
+          const key = (name || code).toLowerCase().replace(/\s+/g, " ");
+          row[newHeader] = categoryLookup.get(key) || "";
+        }
+        // Add the virtual header to the mapping
+        setColumnMapping((prev) => ({ ...prev, [newHeader]: "account_type" }));
+      }
+
+      setParsedFile({ ...parsedFile, rows: updatedRows, rowCount: updatedRows.length });
+    }
+
+    setStep("import");
   };
 
   const runImport = async () => {
@@ -369,6 +444,8 @@ export function DataImportWizard({
     setColumnMapping({});
     setValidationErrors([]);
     setValidationWarnings([]);
+    setOrganizedData(null);
+    setApprovedItems(null);
     setImportState({ running: false, progress: 0, result: null });
     setParseError(null);
     setImportSource("generic");
@@ -606,15 +683,24 @@ export function DataImportWizard({
             <Button variant="outline" onClick={() => setStep("preview")}>
               Back
             </Button>
-            <Button onClick={goToImport}>
-              Validate &amp; Import
+            <Button onClick={goToReview}>
+              Validate &amp; Review
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Step 4: Import Execution */}
+      {/* Step 4: Template Review */}
+      {step === "review" && organizedData && (
+        <ImportTemplateReview
+          organized={organizedData}
+          onApprove={handleReviewApprove}
+          onBack={() => setStep("mapping")}
+        />
+      )}
+
+      {/* Step 5: Import Execution */}
       {step === "import" && parsedFile && (
         <div className="space-y-6">
           <div className="rounded-md border bg-slate-50 p-4 space-y-2">
@@ -711,7 +797,7 @@ export function DataImportWizard({
               <>
                 <Button
                   variant="outline"
-                  onClick={() => setStep("mapping")}
+                  onClick={() => setStep("review")}
                   disabled={importState.running}
                 >
                   Back

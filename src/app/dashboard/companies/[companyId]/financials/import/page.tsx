@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ImportPageClient } from "./import-page-client";
+import type { CompanyRow } from "@/lib/supabase/types";
 
 interface ImportPageProps {
   params: Promise<{ companyId: string }>;
@@ -13,13 +14,22 @@ export default async function ImportPage({ params }: ImportPageProps) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Fetch accounts for mapping assistance
-  const { data: accounts } = await supabase
-    .from("accounts")
-    .select("*")
-    .eq("company_id", companyId)
-    .eq("is_active", true)
-    .order("display_order", { ascending: true });
+  // Fetch company industry and accounts in parallel
+  const [companyResult, accountsResult] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("industry")
+      .eq("id", companyId)
+      .single(),
+    supabase
+      .from("accounts")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("display_order", { ascending: true }),
+  ]);
+
+  const company = companyResult.data as Pick<CompanyRow, "industry"> | null;
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -33,7 +43,8 @@ export default async function ImportPage({ params }: ImportPageProps) {
       <div className="rounded-lg border bg-white p-6">
         <ImportPageClient
           companyId={companyId}
-          accounts={accounts ?? []}
+          accounts={accountsResult.data ?? []}
+          industry={company?.industry ?? null}
         />
       </div>
     </div>

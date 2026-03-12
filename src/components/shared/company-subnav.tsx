@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 interface SubnavTab {
   label: string
   href: string
+  accent?: "green"
 }
 
 interface CompanySubnavProps {
@@ -21,13 +22,13 @@ export function CompanySubnav({ companyId }: CompanySubnavProps) {
   const tabs: SubnavTab[] = [
     { label: "Overview", href: base },
     { label: "Financials", href: `${base}/financials` },
-    { label: "Import Data", href: `${base}/financials/import` },
     { label: "Metrics", href: `${base}/metrics` },
     { label: "Budget", href: `${base}/budget` },
     { label: "Scenarios", href: `${base}/scenarios` },
     { label: "Diligence", href: `${base}/diligence` },
     { label: "Board Deck", href: `${base}/board-deck` },
     { label: "Settings", href: `${base}/settings` },
+    { label: "Import Data", href: `${base}/financials/import`, accent: "green" },
   ]
 
   return (
@@ -48,6 +49,8 @@ export function CompanySubnav({ companyId }: CompanySubnavProps) {
                   pathname.startsWith(other.href)
               )
 
+        const isGreen = tab.accent === "green"
+
         return (
           <Link
             key={tab.href}
@@ -55,9 +58,14 @@ export function CompanySubnav({ companyId }: CompanySubnavProps) {
             className={cn(
               "relative flex h-10 shrink-0 items-center px-3 text-sm font-medium transition-colors",
               "border-b-2 whitespace-nowrap",
-              isActive
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+              isGreen
+                ? isActive
+                  ? "border-emerald-500 text-emerald-700 bg-emerald-50/60"
+                  : "border-transparent text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/40"
+                : isActive
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              isGreen && "ml-auto"
             )}
           >
             {tab.label}
