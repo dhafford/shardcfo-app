@@ -21,7 +21,6 @@ import {
 import {
   STATEMENT_SECTIONS,
   LINE_ITEM_SECTIONS,
-  CATEGORY_TO_SECTION,
   type OrganizedStatement,
   type ReviewLineItem,
   type StatementSection,
@@ -246,11 +245,13 @@ export function ImportTemplateReview({
   const revenueTotal = sectionTotal("revenue");
   const cogsTotal = sectionTotal("cogs");
   const grossProfit = revenueTotal - Math.abs(cogsTotal);
-  const opexTotal = sectionTotal("operating_expense");
-  const ebitda = grossProfit - Math.abs(opexTotal);
-  const otherIncomeTotal = sectionTotal("other_income");
-  const otherExpenseTotal = sectionTotal("other_expense");
-  const netIncome = ebitda + otherIncomeTotal - Math.abs(otherExpenseTotal);
+  const rdTotal = sectionTotal("rd");
+  const smTotal = sectionTotal("sm");
+  const gaTotal = sectionTotal("ga");
+  const totalOpex = Math.abs(rdTotal) + Math.abs(smTotal) + Math.abs(gaTotal);
+  const ebitda = grossProfit - totalOpex;
+  const otherTotal = sectionTotal("other_income_expense");
+  const netIncome = ebitda + otherTotal;
 
   const uncategorized = bySection.get("uncategorized") || [];
 

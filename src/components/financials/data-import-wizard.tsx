@@ -35,7 +35,7 @@ import { detectColumns } from "@/lib/import/csv-parser";
 import { validateData } from "@/lib/import/csv-parser";
 import { parseQuickBooksReport } from "@/lib/import/quickbooks-parser";
 import { parseXeroReport } from "@/lib/import/xero-parser";
-import { organizeIntoTemplate, type ReviewLineItem, type OrganizedStatement } from "@/lib/import/industry-templates";
+import { organizeIntoTemplate, TEMPLATE_TO_DB_CATEGORY, type ReviewLineItem, type OrganizedStatement } from "@/lib/import/industry-templates";
 import { ImportTemplateReview } from "@/components/financials/import-template-review";
 import type { AccountRow } from "@/lib/supabase/types";
 
@@ -356,10 +356,10 @@ export function DataImportWizard({
       const accountNameHeader = reverseMap["account_name"];
       const accountCodeHeader = reverseMap["account_code"];
 
-      // Build a lookup from account key → approved category
+      // Build a lookup from account key → DB-compatible category
       const categoryLookup = new Map<string, string>();
       for (const item of items) {
-        categoryLookup.set(item.key, item.category);
+        categoryLookup.set(item.key, TEMPLATE_TO_DB_CATEGORY[item.category] || item.category);
       }
 
       // Create a set of approved row indices

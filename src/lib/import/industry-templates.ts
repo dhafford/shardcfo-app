@@ -1,13 +1,17 @@
 /**
  * Industry-specific financial statement templates.
  *
- * Every template uses the SAME section structure (Revenue → COGS → Gross Profit
- * → OpEx → EBITDA → Other → Net Income). Only the suggested line items vary
- * per industry.
+ * Every template uses the SAME section structure:
+ *   Revenue → Cost of Revenue → Gross Profit
+ *   → R&D → S&M → G&A → EBITDA
+ *   → Other Income (Expense) → Net Income
+ *
+ * Only the suggested line items vary per industry.
+ * Templates sourced from 12 industry-specific Excel workbooks.
  */
 
 // ---------------------------------------------------------------------------
-// Standard P&L sections — identical for ALL industries
+// Standard Income Statement sections — identical for ALL industries
 // ---------------------------------------------------------------------------
 
 export interface StatementSection {
@@ -15,7 +19,7 @@ export interface StatementSection {
   label: string;
   order: number;
   calculated?: boolean;
-  /** DB account categories that map into this section */
+  /** Template categories that map into this section */
   accountCategories: string[];
   /** Sign convention: 1 = positive adds to income, -1 = subtracted */
   sign: 1 | -1;
@@ -23,25 +27,42 @@ export interface StatementSection {
 
 export const STATEMENT_SECTIONS: StatementSection[] = [
   { id: "revenue", label: "Revenue", order: 1, accountCategories: ["revenue"], sign: 1 },
-  { id: "cogs", label: "Cost of Goods Sold", order: 2, accountCategories: ["cogs"], sign: -1 },
+  { id: "cogs", label: "Cost of Revenue", order: 2, accountCategories: ["cogs"], sign: -1 },
   { id: "gross_profit", label: "Gross Profit", order: 3, calculated: true, accountCategories: [], sign: 1 },
-  { id: "operating_expense", label: "Operating Expenses", order: 4, accountCategories: ["operating_expense"], sign: -1 },
-  { id: "ebitda", label: "EBITDA", order: 5, calculated: true, accountCategories: [], sign: 1 },
-  { id: "other_income", label: "Other Income", order: 6, accountCategories: ["other_income"], sign: 1 },
-  { id: "other_expense", label: "Other Expense", order: 7, accountCategories: ["other_expense"], sign: -1 },
-  { id: "net_income", label: "Net Income", order: 8, calculated: true, accountCategories: [], sign: 1 },
+  { id: "rd", label: "Research & Development", order: 4, accountCategories: ["rd_expense"], sign: -1 },
+  { id: "sm", label: "Sales & Marketing", order: 5, accountCategories: ["sm_expense"], sign: -1 },
+  { id: "ga", label: "General & Administrative", order: 6, accountCategories: ["ga_expense", "operating_expense"], sign: -1 },
+  { id: "ebitda", label: "EBITDA", order: 7, calculated: true, accountCategories: [], sign: 1 },
+  { id: "other_income_expense", label: "Other Income (Expense)", order: 8, accountCategories: ["other_income", "other_expense"], sign: -1 },
+  { id: "net_income", label: "Net Income", order: 9, calculated: true, accountCategories: [], sign: 1 },
 ];
 
 /** Only sections that hold actual line items (not calculated rows). */
 export const LINE_ITEM_SECTIONS = STATEMENT_SECTIONS.filter((s) => !s.calculated);
 
-/** Map from DB account category → section ID */
+/** Map from template category → section ID */
 export const CATEGORY_TO_SECTION: Record<string, string> = {};
 for (const section of STATEMENT_SECTIONS) {
   for (const cat of section.accountCategories) {
     CATEGORY_TO_SECTION[cat] = section.id;
   }
 }
+
+/**
+ * Map template categories back to DB-compatible categories.
+ * The DB schema uses broad categories (operating_expense, other_income, etc.)
+ * while the template system uses finer-grained ones (rd_expense, sm_expense, etc.).
+ */
+export const TEMPLATE_TO_DB_CATEGORY: Record<string, string> = {
+  revenue: "revenue",
+  cogs: "cogs",
+  rd_expense: "operating_expense",
+  sm_expense: "operating_expense",
+  ga_expense: "operating_expense",
+  operating_expense: "operating_expense",
+  other_income: "other_income",
+  other_expense: "other_expense",
+};
 
 // ---------------------------------------------------------------------------
 // Industry templates
@@ -63,234 +84,568 @@ export interface IndustryTemplate {
 
 export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
   {
-    id: "saas",
-    label: "SaaS / Software",
-    matchPatterns: ["saas", "software", "tech", "technology", "cloud", "platform", "ai", "ml", "data"],
+    id: "ai_ml",
+    label: "AI / Machine Learning",
+    matchPatterns: ["ai", "ml", "machine learning", "artificial intelligence", "deep learning", "neural", "llm", "generative"],
     sections: {
       revenue: [
-        { name: "Subscription Revenue", category: "revenue" },
-        { name: "Professional Services", category: "revenue" },
-        { name: "Usage-Based Revenue", category: "revenue" },
+        { name: "Subscription & Platform Revenue", category: "revenue" },
+        { name: "Usage-Based / Consumption Revenue (Compute & API)", category: "revenue" },
+        { name: "Model Licensing & Royalty Revenue", category: "revenue" },
+        { name: "Professional Services & Custom Model Revenue", category: "revenue" },
         { name: "Other Revenue", category: "revenue" },
       ],
       cogs: [
-        { name: "Hosting & Infrastructure", category: "cogs" },
-        { name: "Customer Support", category: "cogs" },
-        { name: "Third-Party Software Costs", category: "cogs" },
-        { name: "Payment Processing Fees", category: "cogs" },
+        { name: "GPU / Compute Infrastructure Costs", category: "cogs" },
+        { name: "Third-Party Model & Data Licensing", category: "cogs" },
+        { name: "Training Data Acquisition & Annotation", category: "cogs" },
+        { name: "Customer Support Costs", category: "cogs" },
+        { name: "Capitalized Model Development Amortization", category: "cogs" },
       ],
-      operating_expense: [
-        { name: "Sales & Marketing", category: "operating_expense" },
-        { name: "Research & Development", category: "operating_expense" },
-        { name: "General & Administrative", category: "operating_expense" },
-        { name: "Rent & Facilities", category: "operating_expense" },
-        { name: "Insurance", category: "operating_expense" },
-        { name: "Depreciation & Amortization", category: "operating_expense" },
+      rd: [
+        { name: "Salaries & Benefits — Research Scientists & Engineers", category: "rd_expense" },
+        { name: "Compute Costs — Research & Experimentation", category: "rd_expense" },
+        { name: "Data Infrastructure & Tooling", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
       ],
-      other_income: [
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Customer Acquisition Costs", category: "sm_expense" },
+        { name: "Events, Conferences & Research Publications", category: "sm_expense" },
+        { name: "Partner & Channel Commissions", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance", category: "ga_expense" },
+        { name: "Legal, IP & Professional Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
         { name: "Interest Income", category: "other_income" },
-      ],
-      other_expense: [
         { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
+      ],
+    },
+  },
+  {
+    id: "data_analytics",
+    label: "Data & Analytics",
+    matchPatterns: ["data", "analytics", "business intelligence", "bi", "data platform", "data analytics"],
+    sections: {
+      revenue: [
+        { name: "Subscription & Platform Revenue", category: "revenue" },
+        { name: "Usage-Based / Consumption Revenue", category: "revenue" },
+        { name: "Data Licensing & Marketplace Revenue", category: "revenue" },
+        { name: "Professional Services & Consulting Revenue", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
+      ],
+      cogs: [
+        { name: "Hosting & Cloud Infrastructure Costs", category: "cogs" },
+        { name: "Third-Party Data Acquisition & Licensing", category: "cogs" },
+        { name: "Customer Support Costs", category: "cogs" },
+        { name: "Payment Processing Fees", category: "cogs" },
+        { name: "Capitalized Software Amortization", category: "cogs" },
+      ],
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Data Infrastructure & Pipeline Tooling", category: "rd_expense" },
+        { name: "Cloud Dev/Test Costs", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
+      ],
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Customer Acquisition Costs", category: "sm_expense" },
+        { name: "Events & Conferences", category: "sm_expense" },
+        { name: "Partner & Channel Commissions", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance", category: "ga_expense" },
+        { name: "Legal & Professional Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
+        { name: "Interest Income", category: "other_income" },
+        { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
+      ],
+    },
+  },
+  {
+    id: "devtools",
+    label: "Developer Tools",
+    matchPatterns: ["devtools", "developer tools", "developer platform", "dev tools", "api platform", "open source", "ci/cd"],
+    sections: {
+      revenue: [
+        { name: "Subscription Revenue", category: "revenue" },
+        { name: "Usage-Based / Consumption Revenue", category: "revenue" },
+        { name: "Marketplace & Add-On Revenue", category: "revenue" },
+        { name: "Professional Services & Training Revenue", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
+      ],
+      cogs: [
+        { name: "Hosting & Infrastructure Costs", category: "cogs" },
+        { name: "Open Source Maintenance & Support", category: "cogs" },
+        { name: "Customer Support Costs", category: "cogs" },
+        { name: "Payment Processing Fees", category: "cogs" },
+        { name: "Capitalized Software Amortization", category: "cogs" },
+      ],
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Open Source Community Investment", category: "rd_expense" },
+        { name: "Cloud Dev/Test Costs", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
+      ],
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Developer Advocacy & Community", category: "sm_expense" },
+        { name: "Events, Conferences & Hackathons", category: "sm_expense" },
+        { name: "Partner & Channel Commissions", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance", category: "ga_expense" },
+        { name: "Legal & Professional Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
+        { name: "Interest Income", category: "other_income" },
+        { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
       ],
     },
   },
   {
     id: "ecommerce",
-    label: "E-Commerce / Retail",
+    label: "E-Commerce",
     matchPatterns: ["ecommerce", "e-commerce", "retail", "dtc", "direct to consumer", "marketplace", "shop", "store"],
     sections: {
       revenue: [
-        { name: "Product Sales", category: "revenue" },
-        { name: "Shipping Revenue", category: "revenue" },
-        { name: "Marketplace Revenue", category: "revenue" },
-        { name: "Return Allowances", category: "revenue" },
+        { name: "Product Revenue", category: "revenue" },
+        { name: "Marketplace / Platform Revenue", category: "revenue" },
+        { name: "Shipping & Delivery Revenue", category: "revenue" },
+        { name: "Advertising & Sponsored Listing Revenue", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
       ],
       cogs: [
-        { name: "Product Costs", category: "cogs" },
-        { name: "Shipping & Fulfillment", category: "cogs" },
-        { name: "Packaging Materials", category: "cogs" },
+        { name: "Cost of Goods Sold (Product)", category: "cogs" },
+        { name: "Fulfillment & Warehousing Costs", category: "cogs" },
+        { name: "Shipping & Delivery Costs", category: "cogs" },
         { name: "Payment Processing Fees", category: "cogs" },
-        { name: "Inventory Shrinkage", category: "cogs" },
+        { name: "Inventory Write-Downs & Shrinkage", category: "cogs" },
       ],
-      operating_expense: [
-        { name: "Sales & Marketing", category: "operating_expense" },
-        { name: "Advertising & Paid Media", category: "operating_expense" },
-        { name: "Warehouse & Operations", category: "operating_expense" },
-        { name: "General & Administrative", category: "operating_expense" },
-        { name: "Rent & Facilities", category: "operating_expense" },
-        { name: "Insurance", category: "operating_expense" },
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Cloud Infrastructure (Dev)", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
+        { name: "Software Tools & Licenses", category: "rd_expense" },
       ],
-      other_income: [
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Performance Marketing & Paid Ads", category: "sm_expense" },
+        { name: "Affiliate & Referral Commissions", category: "sm_expense" },
+        { name: "Promotions & Discounts", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance", category: "ga_expense" },
+        { name: "Legal & Professional Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
         { name: "Interest Income", category: "other_income" },
-      ],
-      other_expense: [
         { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
       ],
     },
   },
   {
-    id: "services",
-    label: "Professional Services",
-    matchPatterns: ["services", "consulting", "agency", "professional", "advisory", "staffing", "legal", "accounting"],
+    id: "edtech",
+    label: "EdTech",
+    matchPatterns: ["edtech", "education", "learning", "courseware", "e-learning", "lms", "training platform"],
     sections: {
       revenue: [
-        { name: "Consulting Revenue", category: "revenue" },
-        { name: "Retainer Revenue", category: "revenue" },
-        { name: "Project Revenue", category: "revenue" },
-        { name: "Reimbursable Revenue", category: "revenue" },
+        { name: "Subscription Revenue (B2C)", category: "revenue" },
+        { name: "Institutional / Enterprise License Revenue (B2B)", category: "revenue" },
+        { name: "Content & Courseware Revenue", category: "revenue" },
+        { name: "Certification & Assessment Revenue", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
       ],
       cogs: [
-        { name: "Direct Labor", category: "cogs" },
-        { name: "Subcontractors", category: "cogs" },
-        { name: "Project Materials", category: "cogs" },
-        { name: "Travel & Expenses (Billable)", category: "cogs" },
+        { name: "Content Development & Licensing", category: "cogs" },
+        { name: "Hosting & Infrastructure Costs", category: "cogs" },
+        { name: "Instructor & Facilitator Costs", category: "cogs" },
+        { name: "Payment Processing Fees", category: "cogs" },
+        { name: "Capitalized Content Amortization", category: "cogs" },
       ],
-      operating_expense: [
-        { name: "Salaries & Benefits", category: "operating_expense" },
-        { name: "Sales & Marketing", category: "operating_expense" },
-        { name: "General & Administrative", category: "operating_expense" },
-        { name: "Rent & Facilities", category: "operating_expense" },
-        { name: "Professional Development", category: "operating_expense" },
-        { name: "Insurance", category: "operating_expense" },
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Curriculum & Instructional Design", category: "rd_expense" },
+        { name: "Cloud Dev/Test Costs", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
       ],
-      other_income: [
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Student / User Acquisition Costs", category: "sm_expense" },
+        { name: "Advertising & Demand Generation", category: "sm_expense" },
+        { name: "Partner & Affiliate Commissions", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance", category: "ga_expense" },
+        { name: "Legal & Professional Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
         { name: "Interest Income", category: "other_income" },
-      ],
-      other_expense: [
         { name: "Interest Expense", category: "other_expense" },
-      ],
-    },
-  },
-  {
-    id: "healthcare",
-    label: "Healthcare / Biotech",
-    matchPatterns: ["health", "healthcare", "biotech", "pharma", "medical", "clinic", "hospital", "wellness", "bio"],
-    sections: {
-      revenue: [
-        { name: "Patient Revenue", category: "revenue" },
-        { name: "Insurance Reimbursements", category: "revenue" },
-        { name: "Lab Services Revenue", category: "revenue" },
-        { name: "Product Sales", category: "revenue" },
-        { name: "Grant Revenue", category: "revenue" },
-      ],
-      cogs: [
-        { name: "Medical Supplies", category: "cogs" },
-        { name: "Lab Costs", category: "cogs" },
-        { name: "Pharmaceuticals", category: "cogs" },
-        { name: "Equipment Depreciation", category: "cogs" },
-      ],
-      operating_expense: [
-        { name: "Clinical Staff", category: "operating_expense" },
-        { name: "Research & Development", category: "operating_expense" },
-        { name: "Regulatory & Compliance", category: "operating_expense" },
-        { name: "General & Administrative", category: "operating_expense" },
-        { name: "Rent & Facilities", category: "operating_expense" },
-        { name: "Insurance & Malpractice", category: "operating_expense" },
-      ],
-      other_income: [
-        { name: "Interest Income", category: "other_income" },
-      ],
-      other_expense: [
-        { name: "Interest Expense", category: "other_expense" },
-      ],
-    },
-  },
-  {
-    id: "manufacturing",
-    label: "Manufacturing",
-    matchPatterns: ["manufacturing", "industrial", "production", "factory", "hardware", "fabrication"],
-    sections: {
-      revenue: [
-        { name: "Product Sales", category: "revenue" },
-        { name: "Custom Orders", category: "revenue" },
-        { name: "Maintenance Contracts", category: "revenue" },
-        { name: "Tooling Revenue", category: "revenue" },
-      ],
-      cogs: [
-        { name: "Raw Materials", category: "cogs" },
-        { name: "Direct Labor", category: "cogs" },
-        { name: "Factory Overhead", category: "cogs" },
-        { name: "Packaging & Shipping", category: "cogs" },
-        { name: "Equipment Depreciation", category: "cogs" },
-      ],
-      operating_expense: [
-        { name: "Sales & Marketing", category: "operating_expense" },
-        { name: "Research & Development", category: "operating_expense" },
-        { name: "General & Administrative", category: "operating_expense" },
-        { name: "Rent & Facilities", category: "operating_expense" },
-        { name: "Quality Control", category: "operating_expense" },
-        { name: "Insurance", category: "operating_expense" },
-      ],
-      other_income: [
-        { name: "Interest Income", category: "other_income" },
-      ],
-      other_expense: [
-        { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
       ],
     },
   },
   {
     id: "fintech",
     label: "Fintech / Financial Services",
-    matchPatterns: ["fintech", "financial", "banking", "payments", "lending", "insurance tech", "insurtech", "crypto", "defi"],
+    matchPatterns: ["fintech", "financial", "banking", "payments", "lending", "insurance tech", "insurtech", "crypto", "defi", "neobank"],
     sections: {
       revenue: [
-        { name: "Transaction Revenue", category: "revenue" },
-        { name: "Subscription Revenue", category: "revenue" },
-        { name: "Interest Income (Operating)", category: "revenue" },
-        { name: "Fee Revenue", category: "revenue" },
+        { name: "Transaction & Processing Revenue", category: "revenue" },
+        { name: "Interchange Revenue", category: "revenue" },
+        { name: "Subscription & Platform Fees", category: "revenue" },
+        { name: "Interest Income on Loans", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
       ],
       cogs: [
-        { name: "Payment Processing Costs", category: "cogs" },
-        { name: "Credit Losses / Provisions", category: "cogs" },
-        { name: "Third-Party Data Costs", category: "cogs" },
-        { name: "Infrastructure & Hosting", category: "cogs" },
+        { name: "Payment Processing & Network Costs", category: "cogs" },
+        { name: "Interchange & Network Fees", category: "cogs" },
+        { name: "Provision for Loan Losses", category: "cogs" },
+        { name: "Fraud & Chargeback Losses", category: "cogs" },
+        { name: "Compliance & Regulatory Costs", category: "cogs" },
       ],
-      operating_expense: [
-        { name: "Sales & Marketing", category: "operating_expense" },
-        { name: "Research & Development", category: "operating_expense" },
-        { name: "General & Administrative", category: "operating_expense" },
-        { name: "Compliance & Regulatory", category: "operating_expense" },
-        { name: "Insurance", category: "operating_expense" },
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Cloud Infrastructure (Dev)", category: "rd_expense" },
+        { name: "Security & Compliance Tools", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
       ],
-      other_income: [
-        { name: "Investment Income", category: "other_income" },
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Customer Acquisition Costs", category: "sm_expense" },
+        { name: "Partner & Referral Fees", category: "sm_expense" },
+        { name: "Brand & Advertising", category: "sm_expense" },
       ],
-      other_expense: [
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance", category: "ga_expense" },
+        { name: "Legal, Regulatory & Licensing Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
+        { name: "Interest Income", category: "other_income" },
         { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
+      ],
+    },
+  },
+  {
+    id: "healthtech",
+    label: "HealthTech",
+    matchPatterns: ["healthtech", "health tech", "health", "healthcare", "biotech", "pharma", "medical", "clinic", "hospital", "wellness", "telehealth", "digital health"],
+    sections: {
+      revenue: [
+        { name: "Subscription & Platform Revenue", category: "revenue" },
+        { name: "Per-Transaction / Per-Claim Revenue", category: "revenue" },
+        { name: "Data & Analytics Revenue", category: "revenue" },
+        { name: "Implementation & Services Revenue", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
+      ],
+      cogs: [
+        { name: "Hosting & Infrastructure Costs", category: "cogs" },
+        { name: "Data Acquisition & Licensing", category: "cogs" },
+        { name: "Claims Processing Costs", category: "cogs" },
+        { name: "Implementation & Onboarding Costs", category: "cogs" },
+        { name: "Capitalized Software Amortization", category: "cogs" },
+      ],
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Clinical & Regulatory R&D", category: "rd_expense" },
+        { name: "Cloud Dev/Test Costs", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
+      ],
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Customer Acquisition Costs", category: "sm_expense" },
+        { name: "Events & Conferences", category: "sm_expense" },
+        { name: "Channel & Reseller Commissions", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance (incl. Malpractice / E&O)", category: "ga_expense" },
+        { name: "Legal, Regulatory & Compliance", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
+        { name: "Interest Income", category: "other_income" },
+        { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
+      ],
+    },
+  },
+  {
+    id: "infrastructure",
+    label: "Infrastructure / Cloud",
+    matchPatterns: ["infrastructure", "cloud", "iaas", "paas", "hosting", "data center", "cdn", "devops platform"],
+    sections: {
+      revenue: [
+        { name: "Subscription & Platform Revenue", category: "revenue" },
+        { name: "Usage-Based / Consumption Revenue", category: "revenue" },
+        { name: "Managed Services Revenue", category: "revenue" },
+        { name: "License & Support Revenue", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
+      ],
+      cogs: [
+        { name: "Data Center & Cloud Infrastructure Costs", category: "cogs" },
+        { name: "Bandwidth & Network Costs", category: "cogs" },
+        { name: "Hardware & Equipment Depreciation", category: "cogs" },
+        { name: "Customer Support Costs", category: "cogs" },
+        { name: "Capitalized Software Amortization", category: "cogs" },
+      ],
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Cloud Dev/Test Costs", category: "rd_expense" },
+        { name: "Hardware R&D & Prototyping", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
+      ],
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Customer Acquisition Costs", category: "sm_expense" },
+        { name: "Events & Conferences", category: "sm_expense" },
+        { name: "Partner & Channel Commissions", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance", category: "ga_expense" },
+        { name: "Legal & Professional Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
+        { name: "Interest Income", category: "other_income" },
+        { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
+      ],
+    },
+  },
+  {
+    id: "markettech",
+    label: "Marketing Technology",
+    matchPatterns: ["martech", "marketing tech", "marketing technology", "adtech", "ad tech", "advertising technology", "marketing automation"],
+    sections: {
+      revenue: [
+        { name: "Subscription & Platform Revenue", category: "revenue" },
+        { name: "Usage-Based / Consumption Revenue", category: "revenue" },
+        { name: "Managed Services Revenue", category: "revenue" },
+        { name: "Data & Analytics Revenue", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
+      ],
+      cogs: [
+        { name: "Hosting & Infrastructure Costs", category: "cogs" },
+        { name: "Third-Party Data & API Costs", category: "cogs" },
+        { name: "Ad Serving & Delivery Costs", category: "cogs" },
+        { name: "Customer Support Costs", category: "cogs" },
+        { name: "Capitalized Software Amortization", category: "cogs" },
+      ],
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Cloud Dev/Test Costs", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
+        { name: "Software Tools & Licenses", category: "rd_expense" },
+      ],
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Customer Acquisition Costs", category: "sm_expense" },
+        { name: "Events & Conferences", category: "sm_expense" },
+        { name: "Partner & Channel Commissions", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance", category: "ga_expense" },
+        { name: "Legal & Professional Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
+        { name: "Interest Income", category: "other_income" },
+        { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
+      ],
+    },
+  },
+  {
+    id: "saas",
+    label: "SaaS",
+    matchPatterns: ["saas", "software", "software as a service", "platform", "tech", "technology"],
+    sections: {
+      revenue: [
+        { name: "Subscription Revenue", category: "revenue" },
+        { name: "Professional Services Revenue", category: "revenue" },
+        { name: "Usage-Based Revenue", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
+      ],
+      cogs: [
+        { name: "Hosting & Infrastructure Costs", category: "cogs" },
+        { name: "Customer Support Costs", category: "cogs" },
+        { name: "Professional Services Costs", category: "cogs" },
+        { name: "Payment Processing Fees", category: "cogs" },
+        { name: "Capitalized Software Amortization", category: "cogs" },
+      ],
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Cloud Dev/Test Environment Costs", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
+        { name: "Software Tools & Licenses", category: "rd_expense" },
+      ],
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Advertising & Demand Generation", category: "sm_expense" },
+        { name: "Events & Conferences", category: "sm_expense" },
+        { name: "Partner & Channel Commissions", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance", category: "ga_expense" },
+        { name: "Legal & Professional Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
+        { name: "Interest Income", category: "other_income" },
+        { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
+      ],
+    },
+  },
+  {
+    id: "security",
+    label: "Cybersecurity",
+    matchPatterns: ["security", "cybersecurity", "cyber", "infosec", "information security", "threat", "soc", "siem", "endpoint protection"],
+    sections: {
+      revenue: [
+        { name: "Subscription Revenue", category: "revenue" },
+        { name: "License Revenue", category: "revenue" },
+        { name: "Managed Security Services Revenue", category: "revenue" },
+        { name: "Professional Services & Consulting Revenue", category: "revenue" },
+        { name: "Other Revenue", category: "revenue" },
+      ],
+      cogs: [
+        { name: "Hosting & Infrastructure Costs", category: "cogs" },
+        { name: "Threat Intelligence & Data Feeds", category: "cogs" },
+        { name: "Security Operations Center (SOC) Costs", category: "cogs" },
+        { name: "Customer Support Costs", category: "cogs" },
+        { name: "Capitalized Software Amortization", category: "cogs" },
+      ],
+      rd: [
+        { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+        { name: "Threat Research & Vulnerability Lab", category: "rd_expense" },
+        { name: "Cloud Dev/Test Costs", category: "rd_expense" },
+        { name: "Contractor & Outsourced Development", category: "rd_expense" },
+      ],
+      sm: [
+        { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+        { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+        { name: "Customer Acquisition Costs", category: "sm_expense" },
+        { name: "Events & Conferences", category: "sm_expense" },
+        { name: "Partner & Channel Commissions", category: "sm_expense" },
+      ],
+      ga: [
+        { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+        { name: "Rent & Facilities", category: "ga_expense" },
+        { name: "Insurance (incl. Cyber Liability)", category: "ga_expense" },
+        { name: "Legal & Professional Fees", category: "ga_expense" },
+        { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+      ],
+      other_income_expense: [
+        { name: "Interest Income", category: "other_income" },
+        { name: "Interest Expense", category: "other_expense" },
+        { name: "Other Income (Expense), Net", category: "other_income" },
+        { name: "Income Tax Expense (Benefit)", category: "other_expense" },
       ],
     },
   },
 ];
 
-/** Fallback template used when no industry matches */
+/** Fallback template used when no industry matches (from "Other" Excel template) */
 export const DEFAULT_TEMPLATE: IndustryTemplate = {
-  id: "general",
-  label: "General",
+  id: "other",
+  label: "Other / General",
   matchPatterns: [],
   sections: {
     revenue: [
-      { name: "Revenue", category: "revenue" },
+      { name: "Product Revenue", category: "revenue" },
+      { name: "Service Revenue", category: "revenue" },
+      { name: "Subscription Revenue", category: "revenue" },
+      { name: "Usage-Based Revenue", category: "revenue" },
       { name: "Other Revenue", category: "revenue" },
     ],
     cogs: [
-      { name: "Cost of Revenue", category: "cogs" },
-      { name: "Direct Costs", category: "cogs" },
+      { name: "Hosting & Infrastructure Costs", category: "cogs" },
+      { name: "Direct Labor & Service Delivery", category: "cogs" },
+      { name: "Third-Party Costs & Licensing", category: "cogs" },
+      { name: "Payment Processing Fees", category: "cogs" },
+      { name: "Depreciation & Amortization (COGS)", category: "cogs" },
     ],
-    operating_expense: [
-      { name: "Sales & Marketing", category: "operating_expense" },
-      { name: "Research & Development", category: "operating_expense" },
-      { name: "General & Administrative", category: "operating_expense" },
-      { name: "Rent & Facilities", category: "operating_expense" },
-      { name: "Depreciation & Amortization", category: "operating_expense" },
-      { name: "Insurance", category: "operating_expense" },
+    rd: [
+      { name: "Salaries & Benefits — Engineering", category: "rd_expense" },
+      { name: "Cloud Dev/Test Costs", category: "rd_expense" },
+      { name: "Contractor & Outsourced Development", category: "rd_expense" },
+      { name: "Software Tools & Licenses", category: "rd_expense" },
     ],
-    other_income: [
+    sm: [
+      { name: "Salaries & Benefits — Sales", category: "sm_expense" },
+      { name: "Salaries & Benefits — Marketing", category: "sm_expense" },
+      { name: "Customer Acquisition Costs", category: "sm_expense" },
+      { name: "Events & Conferences", category: "sm_expense" },
+      { name: "Partner & Channel Commissions", category: "sm_expense" },
+    ],
+    ga: [
+      { name: "Salaries & Benefits — G&A", category: "ga_expense" },
+      { name: "Rent & Facilities", category: "ga_expense" },
+      { name: "Insurance", category: "ga_expense" },
+      { name: "Legal & Professional Fees", category: "ga_expense" },
+      { name: "Depreciation & Amortization (Non-COGS)", category: "ga_expense" },
+    ],
+    other_income_expense: [
       { name: "Interest Income", category: "other_income" },
-    ],
-    other_expense: [
       { name: "Interest Expense", category: "other_expense" },
+      { name: "Other Income (Expense), Net", category: "other_income" },
+      { name: "Income Tax Expense (Benefit)", category: "other_expense" },
     ],
   },
 };
@@ -334,16 +689,21 @@ export function matchIndustryTemplate(industry: string | null | undefined): Indu
 // ---------------------------------------------------------------------------
 
 const CATEGORY_KEYWORDS: { pattern: RegExp; category: string }[] = [
-  // Revenue signals
-  { pattern: /\b(revenue|sales|income|subscription|recurring|arr|mrr)\b/i, category: "revenue" },
-  // COGS signals
-  { pattern: /\b(cogs|cost of (goods|revenue|sales)|hosting|infrastructure|direct cost|payment processing)\b/i, category: "cogs" },
-  // OpEx signals
-  { pattern: /\b(salary|salaries|wages|benefits|rent|marketing|advertising|r&d|research|development|admin|office|travel|insurance|depreciation|amortization|professional fees|legal fees|accounting)\b/i, category: "operating_expense" },
-  // Other income
-  { pattern: /\b(interest income|dividend|gain on|investment income|grant)\b/i, category: "other_income" },
-  // Other expense
-  { pattern: /\b(interest expense|loss on|write.?off|bad debt|tax expense)\b/i, category: "other_expense" },
+  // Other income/expense FIRST — specific patterns should not be caught by broader ones
+  { pattern: /\b(interest income|dividend|gain on|investment income|grant income)\b/i, category: "other_income" },
+  { pattern: /\b(interest expense|loss on|write.?off|bad debt|tax expense|income tax)\b/i, category: "other_expense" },
+  // COGS signals (before revenue — "cost of sales/revenue" should match COGS not revenue)
+  { pattern: /\b(cogs|cost of (goods|revenue|sales)|hosting|infrastructure|direct cost|payment processing|fulfillment|warehousing)\b/i, category: "cogs" },
+  // R&D signals (before generic patterns)
+  { pattern: /\b(r&d|research|development|engineering|dev.?ops|data infrastructure|compute cost|software tools|cloud dev)\b/i, category: "rd_expense" },
+  // S&M signals (before revenue — "Sales & Marketing" should match S&M not revenue)
+  { pattern: /\b(sales & marketing|sales &|marketing|advertising|customer acquisition|demand gen|events|conferences|partner.*commission|channel|brand|advocacy)\b/i, category: "sm_expense" },
+  // G&A signals
+  { pattern: /\b(general & admin|g&a|rent|facilities|insurance|legal|professional fees|depreciation|amortization|office|admin|executive|finance)\b/i, category: "ga_expense" },
+  // Revenue signals LAST among line-item categories (broadest patterns)
+  { pattern: /\b(revenue|sales|subscription|recurring|arr|mrr|license fee)\b/i, category: "revenue" },
+  // Generic salary/wages → G&A as catch-all
+  { pattern: /\b(salary|salaries|wages|benefits|travel)\b/i, category: "ga_expense" },
 ];
 
 /** Guess an account's category from its name. Returns null if no confident match. */
@@ -463,6 +823,16 @@ export function organizeIntoTemplate(input: OrganizeInput): OrganizedStatement {
           category = "";
           confidence = "low";
         }
+      }
+
+      // If category is the broad "operating_expense", try to narrow it to R&D/S&M/G&A
+      if (category === "operating_expense") {
+        const guess = guessCategory(accountName || accountCode);
+        if (guess && ["rd_expense", "sm_expense", "ga_expense"].includes(guess.category)) {
+          category = guess.category;
+          confidence = "medium";
+        }
+        // If still "operating_expense", it stays mapped to "ga" via CATEGORY_TO_SECTION
       }
 
       groups.set(key, {
