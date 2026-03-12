@@ -693,6 +693,63 @@ export type Database = {
           },
         ]
       }
+      company_files: {
+        Row: {
+          id: string
+          company_id: string
+          file_name: string
+          file_size: number
+          mime_type: string | null
+          category: string
+          storage_path: string
+          uploaded_by: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          file_name: string
+          file_size: number
+          mime_type?: string | null
+          category?: string
+          storage_path: string
+          uploaded_by?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          file_name?: string
+          file_size?: number
+          mime_type?: string | null
+          category?: string
+          storage_path?: string
+          uploaded_by?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_files_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_files_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scenarios: {
         Row: {
           assumptions: Json
@@ -837,6 +894,7 @@ export type DDItemRow = Database['public']['Tables']['dd_items']['Row']
 export type DataRoomDocumentRow = Database['public']['Tables']['data_room_documents']['Row']
 export type DDFindingRow = Database['public']['Tables']['dd_findings']['Row']
 export type QoEAdjustmentRow = Database['public']['Tables']['qoe_adjustments']['Row']
+export type CompanyFileRow = Database['public']['Tables']['company_files']['Row']
 
 // -------------------------------------------------------------------
 // Insert type aliases
@@ -857,6 +915,7 @@ export type DDItemInsert = Database['public']['Tables']['dd_items']['Insert']
 export type DataRoomDocumentInsert = Database['public']['Tables']['data_room_documents']['Insert']
 export type DDFindingInsert = Database['public']['Tables']['dd_findings']['Insert']
 export type QoEAdjustmentInsert = Database['public']['Tables']['qoe_adjustments']['Insert']
+export type CompanyFileInsert = Database['public']['Tables']['company_files']['Insert']
 
 // -------------------------------------------------------------------
 // Update type aliases
@@ -877,6 +936,7 @@ export type DDItemUpdate = Database['public']['Tables']['dd_items']['Update']
 export type DataRoomDocumentUpdate = Database['public']['Tables']['data_room_documents']['Update']
 export type DDFindingUpdate = Database['public']['Tables']['dd_findings']['Update']
 export type QoEAdjustmentUpdate = Database['public']['Tables']['qoe_adjustments']['Update']
+export type CompanyFileUpdate = Database['public']['Tables']['company_files']['Update']
 
 // -------------------------------------------------------------------
 // Convenience type helpers
@@ -946,3 +1006,4 @@ export type QoEAdjustmentType =
   | 'owner_discretionary'
   | 'related_party'
   | 'run_rate'
+export type FileCategory = 'historicals' | 'projections' | 'board_materials' | 'investment_memorandum' | 'other'

@@ -28,6 +28,7 @@ export function CompanySubnav({ companyId }: CompanySubnavProps) {
     { label: "Scenarios", href: `${base}/scenarios` },
     { label: "Diligence", href: `${base}/diligence` },
     { label: "Board Deck", href: `${base}/board-deck` },
+    { label: "Files", href: `${base}/files` },
     { label: "Settings", href: `${base}/settings` },
     { label: "Import Data", href: `${base}/financials/import`, accent: "green" },
   ]
