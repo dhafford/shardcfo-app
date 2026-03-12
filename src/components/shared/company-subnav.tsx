@@ -21,6 +21,7 @@ export function CompanySubnav({ companyId }: CompanySubnavProps) {
   const tabs: SubnavTab[] = [
     { label: "Overview", href: base },
     { label: "Financials", href: `${base}/financials` },
+    { label: "Import Data", href: `${base}/financials/import` },
     { label: "Metrics", href: `${base}/metrics` },
     { label: "Budget", href: `${base}/budget` },
     { label: "Scenarios", href: `${base}/scenarios` },
@@ -35,11 +36,17 @@ export function CompanySubnav({ companyId }: CompanySubnavProps) {
       className="flex h-11 shrink-0 items-end gap-0 overflow-x-auto border-b bg-white px-4"
     >
       {tabs.map((tab) => {
-        // Exact match for overview, prefix match for the rest
+        // Exact match for overview; for others, only highlight the most specific match
         const isActive =
           tab.href === base
             ? pathname === base
-            : pathname.startsWith(tab.href)
+            : pathname.startsWith(tab.href) &&
+              !tabs.some(
+                (other) =>
+                  other.href !== tab.href &&
+                  other.href.startsWith(tab.href) &&
+                  pathname.startsWith(other.href)
+              )
 
         return (
           <Link
