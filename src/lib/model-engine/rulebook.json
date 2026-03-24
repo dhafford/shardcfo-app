@@ -1,0 +1,3099 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "metadata": {
+    "title": "Three-Statement Financial Model: Complete Machine-Readable Rulebook",
+    "version": "1.0.0",
+    "generated": "2026-03-24",
+    "description": "Exhaustive, machine-readable specification defining every rule, relationship, linkage, constraint, dependency, and diagnostic governing the construction of a structurally correct three-statement financial model. Designed for AI agents and developers to implement a model builder producing mathematically sound and auditable output.",
+    "architecture_philosophy": "Treat the model as a directed acyclic graph (DAG), not a spreadsheet. Isolate strongly connected components (SCCs) for iterative solving. Cash is solved last. The balance sheet is the single source of truth.",
+    "artifact_types": ["RULE", "LINK", "CONSTRAINT", "SEQ", "DIAG"],
+    "naming_convention": "{ARTTYPE}-{NAMESPACE}-{STATEMENT}-{TOPIC}-{SEQUENCE}",
+    "evaluation_order": "column-wise (period-by-period), left-to-right across time, top-to-bottom within each period via topological sort",
+    "tolerance": {
+      "computation": 1e-6,
+      "display": 0.01,
+      "description": "Computation tolerance for iterative solvers and constraint checks. Display tolerance for human-readable output rounding."
+    },
+    "currency_standard": "ISO 4217",
+    "supported_standards": ["US_GAAP", "IFRS"]
+  },
+
+  "foundational_accounting_identities": [
+    {
+      "id": "IDENTITY-CORE-BS-ACCOUNTING_EQ-001",
+      "name": "Accounting Equation",
+      "equation": "Assets = Liabilities + Equity",
+      "latex": "A_t = L_t + E_t",
+      "scope": "Balance Sheet",
+      "enforcement": "continuous_constraint",
+      "tolerance": 1e-6,
+      "violation_means": "Broken linkage, sign error, or omitted transaction. The model is structurally invalid.",
+      "violation_implications": [
+        "At least one cross-statement link is broken or has an incorrect sign",
+        "A transaction was recorded to only one side of the equation",
+        "A supporting schedule is not properly tied to the balance sheet",
+        "Cash, retained earnings, or a roll-forward schedule is disconnected"
+      ],
+      "common_fixes": [
+        "Re-tie cash from CFS ending cash to BS cash line",
+        "Verify retained earnings bridge (NI, dividends, adjustments)",
+        "Audit all supporting schedule ending balances vs BS line items",
+        "Check sign conventions on contra accounts (accumulated depreciation, treasury stock)"
+      ],
+      "diagnostic_procedure": [
+        "Step 1: Check cash tie-out (CFS ending cash vs BS cash)",
+        "Step 2: Check retained earnings continuity",
+        "Step 3: Check working capital deltas (CFS vs BS)",
+        "Step 4: Audit PP&E and debt roll-forwards for omitted non-cash items"
+      ],
+      "edge_cases": [
+        "Negative equity is permitted (accumulated deficit > APIC + common stock)",
+        "Non-controlling interests must be included in equity",
+        "Treasury stock is a contra-equity (negative) account",
+        "Unrealized gains/losses in AOCI affect equity but not retained earnings"
+      ]
+    },
+    {
+      "id": "IDENTITY-CORE-IS_BS-RE_BRIDGE-002",
+      "name": "Retained Earnings Bridge",
+      "equation": "RE_t = RE_{t-1} + NI_t - Div_t +/- Adjustments",
+      "latex": "RE_t = RE_{t-1} + NI_t - Div_t \\pm Adj_t",
+      "scope": "Income Statement to Balance Sheet",
+      "enforcement": "continuous_constraint",
+      "tolerance": 1e-6,
+      "components": {
+        "opening_balance": {
+          "symbol": "RE_{t-1}",
+          "source": "BS.RetainedEarnings prior period",
+          "description": "Retained earnings at the end of the prior period"
+        },
+        "net_income": {
+          "symbol": "NI_t",
+          "source": "IS.NetIncome current period",
+          "description": "Net income flows from IS bottom line to retained earnings"
+        },
+        "dividends": {
+          "symbol": "Div_t",
+          "source": "CFS.CFF.Dividends current period",
+          "description": "Common and preferred dividends declared reduce retained earnings",
+          "sign": "negative (reduces RE)"
+        },
+        "adjustments": {
+          "description": "Other items that bypass the income statement but affect retained earnings",
+          "items": [
+            {
+              "name": "Cumulative effect of accounting changes",
+              "standard": "ASC 250",
+              "description": "Retrospective adjustments for changes in accounting principle"
+            },
+            {
+              "name": "Prior period error corrections",
+              "standard": "ASC 250",
+              "description": "Corrections of material errors in previously issued financial statements"
+            },
+            {
+              "name": "Transition adjustments",
+              "description": "One-time adjustments from adopting new accounting standards (e.g., ASC 842 lease transition)"
+            }
+          ]
+        }
+      },
+      "violation_means": "Cumulative profits not correctly reconciled between IS and BS",
+      "common_fixes": [
+        "Re-link Net Income from IS to RE bridge",
+        "Pull dividends correctly from CFF section",
+        "Check for omitted prior-period adjustments or accounting change effects",
+        "Ensure OCI items are flowing to AOCI, not retained earnings"
+      ],
+      "important_distinction": "Other Comprehensive Income (OCI) items do NOT flow through retained earnings. They flow to Accumulated Other Comprehensive Income (AOCI), a separate equity component. Common OCI items include: unrealized gains/losses on AFS securities, foreign currency translation adjustments (CTA), pension/OPEB adjustments, and cash flow hedge gains/losses."
+    },
+    {
+      "id": "IDENTITY-CORE-CFS_BS-CASH_BRIDGE-003",
+      "name": "Cash Bridge",
+      "equation": "Cash_t = Cash_{t-1} + CFO_t + CFI_t + CFF_t +/- FX_t",
+      "latex": "Cash_t = Cash_{t-1} + CFO_t + CFI_t + CFF_t \\pm FX_t",
+      "scope": "Cash Flow Statement to Balance Sheet",
+      "enforcement": "continuous_constraint",
+      "tolerance": 1e-6,
+      "components": {
+        "opening_cash": {
+          "symbol": "Cash_{t-1}",
+          "source": "BS.Cash prior period or CFS.BeginningCash",
+          "description": "Cash and cash equivalents at start of period"
+        },
+        "cfo": {
+          "symbol": "CFO_t",
+          "source": "CFS.OperatingActivities total",
+          "description": "Net cash from operating activities (indirect method: NI + non-cash adjustments + WC changes)"
+        },
+        "cfi": {
+          "symbol": "CFI_t",
+          "source": "CFS.InvestingActivities total",
+          "description": "Net cash from investing activities (CapEx, acquisitions, asset sales, investment purchases/sales)"
+        },
+        "cff": {
+          "symbol": "CFF_t",
+          "source": "CFS.FinancingActivities total",
+          "description": "Net cash from financing activities (debt issuances/repayments, equity issuances/buybacks, dividends)"
+        },
+        "fx_effect": {
+          "symbol": "FX_t",
+          "source": "CFS.FXEffect",
+          "description": "Effect of exchange rate changes on cash held in foreign currencies. Separate line item required by ASC 830/IAS 21.",
+          "standards": ["ASC 830", "IAS 21"],
+          "mechanics": "Difference between translating foreign-currency cash at beginning vs ending exchange rates"
+        }
+      },
+      "violation_means": "CFS does not accurately explain the change in BS cash",
+      "common_fixes": [
+        "Fix non-cash adjustment signs in CFO",
+        "Fix working capital delta signs",
+        "Link BS cash directly to CFS ending cash (not an independent calculation)",
+        "Ensure FX effect on cash is properly isolated",
+        "Check that all investing and financing activities are captured"
+      ]
+    },
+    {
+      "id": "IDENTITY-CORE-IS_CFS_BS-PPE_ROLL-004",
+      "name": "PP&E Roll-Forward",
+      "equation": "PP&E_net_t = PP&E_net_{t-1} + CapEx_t - D&A_t - NBV_disposals_t +/- Impairment_t",
+      "latex": "PPE^{net}_t = PPE^{net}_{t-1} + CapEx_t - DA_t - NBV^{disp}_t - Impairment_t",
+      "scope": "Income Statement, Cash Flow Statement, and Balance Sheet",
+      "enforcement": "continuous_constraint",
+      "tolerance": 1e-6,
+      "preferred_method": "dual_roll_forward",
+      "dual_roll_forward": {
+        "gross_ppe": {
+          "equation": "GrossPPE_t = GrossPPE_{t-1} + CapEx_t + Acquisitions_t - GrossCost_disposals_t",
+          "description": "Track additions at cost and removals at original cost"
+        },
+        "accumulated_depreciation": {
+          "equation": "AccumDepr_t = AccumDepr_{t-1} + D&A_t - AccumDepr_disposals_t - Impairment_t",
+          "description": "Track cumulative depreciation, removing accumulated depreciation on disposed assets"
+        },
+        "net_ppe": {
+          "equation": "NetPPE_t = GrossPPE_t - AccumDepr_t",
+          "description": "Net book value is gross cost less accumulated depreciation"
+        }
+      },
+      "violation_means": "Change in fixed asset base is incorrectly accounted for",
+      "common_fixes": [
+        "Track gross PP&E and accumulated depreciation separately",
+        "Ensure disposal removes both gross cost AND accumulated depreciation",
+        "Verify CapEx ties to CFI outflows",
+        "Check that impairment charges are properly reflected",
+        "Confirm D&A from the PP&E schedule matches IS D&A and CFS add-back"
+      ]
+    },
+    {
+      "id": "IDENTITY-CORE-CFF_BS-DEBT_ROLL-005",
+      "name": "Debt Roll-Forward",
+      "equation": "Debt_t = Debt_{t-1} + Issuances_t - Repayments_t + PIK_t - Amortization_t",
+      "latex": "Debt_t = Debt_{t-1} + Iss_t - Repay_t + PIK_t - Amort_t",
+      "scope": "Cash Flow Statement (Financing) to Balance Sheet",
+      "enforcement": "continuous_constraint",
+      "tolerance": 1e-6,
+      "per_tranche": true,
+      "components": {
+        "opening_balance": "Prior period ending balance for the tranche",
+        "issuances": "New debt raised, flows through CFF as inflow (positive)",
+        "repayments": "Mandatory amortization + optional prepayments, flows through CFF as outflow (negative)",
+        "pik_interest": "Payment-in-Kind interest added to principal (non-cash, add back in CFO)",
+        "oid_amortization": "Original Issue Discount amortization increases carrying value toward par",
+        "debt_issuance_cost_amort": "Reduces the carrying value contra-liability; non-cash expense added back in CFO"
+      },
+      "violation_means": "Financing activities are not correctly linked to the BS",
+      "common_fixes": [
+        "Use tranche-level schedules with explicit roll-forwards",
+        "Tie issuances and repayments to CFF",
+        "Include PIK interest as non-cash addition to principal",
+        "Account for OID amortization and debt issuance cost amortization",
+        "Ensure mandatory amortization schedules are correctly programmed"
+      ]
+    },
+    {
+      "id": "IDENTITY-CORE-IS-EBITDA_BRIDGE-006",
+      "name": "EBITDA Bridge",
+      "equation": "EBITDA = EBIT + D&A",
+      "latex": "EBITDA_t = EBIT_t + DA_t",
+      "scope": "Income Statement",
+      "enforcement": "continuous_constraint",
+      "tolerance": 1e-6,
+      "extended_bridges": {
+        "ebitda_from_revenue": "Revenue - COGS - SGA - Other_OpEx + D&A",
+        "adjusted_ebitda": {
+          "equation": "Adj_EBITDA = EBITDA + SBC + Restructuring + Impairment + Other_NonRecurring",
+          "common_addbacks": [
+            {
+              "item": "Stock-Based Compensation (SBC)",
+              "rationale": "Non-cash expense; widely added back though debated"
+            },
+            {
+              "item": "Restructuring charges",
+              "rationale": "Non-recurring operational costs"
+            },
+            {
+              "item": "Impairment charges",
+              "rationale": "Non-cash write-downs"
+            },
+            {
+              "item": "Transaction/acquisition costs",
+              "rationale": "One-time deal-related expenses"
+            },
+            {
+              "item": "Litigation settlements",
+              "rationale": "Non-recurring legal costs"
+            },
+            {
+              "item": "Loss on extinguishment of debt",
+              "rationale": "Non-recurring financing cost"
+            }
+          ]
+        }
+      },
+      "violation_means": "Logical impossibility — D&A cannot be negative under normal operations",
+      "common_fixes": [
+        "Normalize signs to ensure D&A is always a positive add-back to EBIT",
+        "Ensure single source of truth for D&A (from PP&E/intangible schedules)",
+        "Do not double-count D&A included within COGS vs a separate line"
+      ]
+    }
+  ],
+
+  "machine_readable_architecture": {
+    "artifact_schemas": {
+      "RULE": {
+        "description": "Defines calculation logic for a specific line item",
+        "schema": {
+          "id": "string (unique, follows naming convention)",
+          "name": "string (human-readable name)",
+          "statement": "enum: IS | BS | CFS | SCHEDULE",
+          "section": "string (e.g., CFO, CFI, CFF, CurrentAssets, LongTermDebt)",
+          "line_item": "string (e.g., Revenue, COGS, NetIncome)",
+          "formula": "string (safe DSL expression or AST)",
+          "inputs": ["array of input variable references"],
+          "output": "string (output variable name)",
+          "unit": "string (ISO 4217 currency code or 'ratio' or 'days' or 'shares')",
+          "time_index": "string (t for current, lag(x, n) for prior periods)",
+          "sign_convention": "string (canonical sign expected)",
+          "dependencies": ["array of RULE/LINK IDs this depends on"],
+          "notes": "string (optional explanation)"
+        }
+      },
+      "LINK": {
+        "description": "Maps values between statements with typed relationships",
+        "schema": {
+          "id": "string (unique, follows naming convention)",
+          "name": "string (human-readable name)",
+          "source_statement": "enum: IS | BS | CFS | SCHEDULE",
+          "source_line_item": "string",
+          "target_statement": "enum: IS | BS | CFS | SCHEDULE",
+          "target_line_item": "string",
+          "relationship_type": "enum: equals | delta | derived | roll_forward",
+          "formula": "string (transformation formula if not equals)",
+          "sign_adjustment": "string (sign transformation if needed)",
+          "bidirectional": "boolean (true if creates circularity)",
+          "notes": "string"
+        },
+        "relationship_types": {
+          "equals": "Direct 1:1 mapping, no transformation. Source value equals target value.",
+          "delta": "Target is the period-over-period change in the source. Used for working capital changes.",
+          "derived": "Target is calculated from source using a formula. Used for interest expense from average debt.",
+          "roll_forward": "Target ending balance = opening + additions - removals. Used for PP&E, debt, equity."
+        }
+      },
+      "CONSTRAINT": {
+        "description": "Boolean predicate that must hold true in every period",
+        "schema": {
+          "id": "string (unique, follows naming convention)",
+          "name": "string (human-readable name)",
+          "predicate": "string (boolean expression that must evaluate to true)",
+          "tolerance": "number (acceptable deviation)",
+          "severity": "enum: CRITICAL | WARNING | INFO",
+          "scope": "string (which statements/periods this applies to)",
+          "on_violation": "string (action to take: HALT | WARN | LOG)",
+          "related_diagnostic": "string (DIAG ID for remediation)"
+        }
+      },
+      "SEQ": {
+        "description": "Orchestrates evaluation order and manages dependencies",
+        "schema": {
+          "id": "string (unique, follows naming convention)",
+          "name": "string (human-readable name)",
+          "phase": "number (execution phase, lower = earlier)",
+          "depends_on": ["array of SEQ IDs that must complete first"],
+          "rules_to_evaluate": ["array of RULE IDs to evaluate in this phase"],
+          "iteration_policy": {
+            "is_scc": "boolean (true if this phase contains circular references)",
+            "max_iterations": "number (for SCC phases)",
+            "convergence_tolerance": "number (for SCC phases)",
+            "damping_factor": "number (alpha for relaxation, typically 0.7)",
+            "breaker_mode": "boolean (use beginning balances instead of iterating)"
+          }
+        }
+      },
+      "DIAG": {
+        "description": "Defines diagnostic tests with error messages and remediation steps",
+        "schema": {
+          "id": "string (unique, follows naming convention)",
+          "name": "string (human-readable name)",
+          "check_formula": "string (expression that should evaluate to true/within tolerance)",
+          "tolerance": "number",
+          "severity": "enum: CRITICAL | WARNING | INFO",
+          "typical_root_cause": "string",
+          "localization_steps": ["array of steps to find the error"],
+          "fix_steps": ["array of steps to fix the error"],
+          "related_constraints": ["array of CONSTRAINT IDs"],
+          "run_frequency": "enum: every_period | end_of_model | on_demand"
+        }
+      }
+    },
+    "expression_language": {
+      "name": "Financial Model DSL",
+      "serialization": "JSON-safe infix notation or explicit AST",
+      "time_indexing": {
+        "current_period": "t",
+        "prior_period": "lag(x, 1)",
+        "n_periods_ago": "lag(x, n)",
+        "future_period": "lead(x, n)"
+      },
+      "operators": ["+", "-", "*", "/", "max()", "min()", "abs()", "if()", "sum()", "avg()"],
+      "special_functions": {
+        "lag": "lag(variable, periods) — references a prior period value",
+        "lead": "lead(variable, periods) — references a future period value (use with caution)",
+        "avg_balance": "avg_balance(open, close) = (open + close) / 2 — for interest calculations",
+        "annualize": "annualize(value, days_in_period, days_in_year) — for partial-year calculations",
+        "days_in_period": "days_in_period(t) — returns calendar days in the period",
+        "coalesce": "coalesce(a, b) — returns first non-null value"
+      },
+      "unit_checking": {
+        "enabled": true,
+        "standard": "ISO 4217 for currencies",
+        "dimensional_analysis": "Ensures units are consistent across operations (e.g., USD * ratio = USD, USD / USD = ratio)"
+      }
+    }
+  },
+
+  "inter_statement_linkages": [
+    {
+      "id": "LINK-IS-CFS-001",
+      "name": "Net Income to CFO",
+      "source": {
+        "statement": "IS",
+        "line_item": "NetIncome",
+        "description": "Bottom line of the income statement after all expenses, interest, and taxes"
+      },
+      "target": {
+        "statement": "CFS",
+        "section": "CFO",
+        "line_item": "StartingPoint",
+        "description": "Starting point for indirect method cash flow from operations"
+      },
+      "relationship_type": "derived",
+      "formula": "CFS.CFO.Start_t = IS.NetIncome_t",
+      "sign_note": "Positive NI is positive starting point. Losses are negative starting point.",
+      "criticality": "CRITICAL",
+      "failure_symptom": "CFO will be incorrect by the full amount of net income, causing cash and BS to break"
+    },
+    {
+      "id": "LINK-IS-BS-001",
+      "name": "Net Income to Retained Earnings",
+      "source": {
+        "statement": "IS",
+        "line_item": "NetIncome"
+      },
+      "target": {
+        "statement": "BS",
+        "section": "Equity",
+        "line_item": "RetainedEarnings"
+      },
+      "relationship_type": "derived",
+      "formula": "BS.RE_t = BS.RE_{t-1} + IS.NetIncome_t - CFS.CFF.Dividends_t",
+      "sign_note": "NI positive increases RE. Dividends (positive value) decrease RE.",
+      "criticality": "CRITICAL",
+      "failure_symptom": "BS equity will be wrong, causing A != L + E imbalance"
+    },
+    {
+      "id": "LINK-IS-CFS-002",
+      "name": "D&A to CFO Add-Back",
+      "source": {
+        "statement": "IS",
+        "line_item": "DepreciationAndAmortization",
+        "description": "Non-cash expense that reduces operating income"
+      },
+      "target": {
+        "statement": "CFS",
+        "section": "CFO",
+        "line_item": "AddBack_DA",
+        "description": "Non-cash expense added back to net income in CFO"
+      },
+      "relationship_type": "derived",
+      "formula": "CFS.CFO.AddBack_DA_t = IS.DA_t",
+      "sign_note": "D&A is negative on IS (expense), added back as positive on CFS. Single source of truth from PP&E/intangible schedule.",
+      "criticality": "CRITICAL",
+      "single_source_rule": "D&A must come from a single schedule (PP&E + Intangibles). IS D&A and CFS add-back must reference the same source.",
+      "failure_symptom": "D&A mismatch between IS and CFS, causing incorrect CFO and potentially breaking cash tie-out"
+    },
+    {
+      "id": "LINK-CFS-BS-001",
+      "name": "CapEx to Gross PP&E",
+      "source": {
+        "statement": "CFS",
+        "section": "CFI",
+        "line_item": "CapEx",
+        "description": "Capital expenditures as cash outflow in investing activities"
+      },
+      "target": {
+        "statement": "BS",
+        "section": "LongTermAssets",
+        "line_item": "GrossPPE",
+        "description": "Gross property, plant, and equipment on the balance sheet"
+      },
+      "relationship_type": "roll_forward",
+      "formula": "BS.GrossPPE_t = BS.GrossPPE_{t-1} + abs(CFS.CapEx_t) - GrossCost_Disposals_t",
+      "sign_note": "CapEx is negative on CFS (cash outflow) but positive addition to gross PP&E. Use absolute value when linking.",
+      "criticality": "HIGH",
+      "failure_symptom": "PP&E balance incorrect, BS imbalance"
+    },
+    {
+      "id": "LINK-BS-CFS-001",
+      "name": "Working Capital Changes",
+      "source": {
+        "statement": "BS",
+        "section": "OperatingAssets_and_Liabilities",
+        "line_items": ["AccountsReceivable", "Inventory", "PrepaidExpenses", "AccountsPayable", "AccruedLiabilities", "DeferredRevenue"]
+      },
+      "target": {
+        "statement": "CFS",
+        "section": "CFO",
+        "line_items": ["ChangeInAR", "ChangeInInventory", "ChangeInPrepaid", "ChangeInAP", "ChangeInAccruedLiab", "ChangeInDeferredRev"]
+      },
+      "relationship_type": "delta",
+      "formulas": {
+        "operating_assets": "CFS.Change_t = -(BS.Asset_t - BS.Asset_{t-1})",
+        "operating_liabilities": "CFS.Change_t = +(BS.Liability_t - BS.Liability_{t-1})",
+        "explanation": "Increase in operating asset = use of cash (negative). Increase in operating liability = source of cash (positive)."
+      },
+      "detailed_formulas": {
+        "accounts_receivable": {
+          "formula": "CFS.ChangeInAR_t = -(BS.AR_t - BS.AR_{t-1})",
+          "logic": "AR increase means revenue was earned but cash not yet collected = use of cash"
+        },
+        "inventory": {
+          "formula": "CFS.ChangeInInventory_t = -(BS.Inventory_t - BS.Inventory_{t-1})",
+          "logic": "Inventory increase means cash was spent to build inventory = use of cash"
+        },
+        "prepaid_expenses": {
+          "formula": "CFS.ChangeInPrepaid_t = -(BS.Prepaid_t - BS.Prepaid_{t-1})",
+          "logic": "Prepaid increase means cash paid in advance of expense recognition = use of cash"
+        },
+        "accounts_payable": {
+          "formula": "CFS.ChangeInAP_t = +(BS.AP_t - BS.AP_{t-1})",
+          "logic": "AP increase means expenses incurred but cash not yet paid = source of cash"
+        },
+        "accrued_liabilities": {
+          "formula": "CFS.ChangeInAccrued_t = +(BS.AccruedLiab_t - BS.AccruedLiab_{t-1})",
+          "logic": "Accrued liability increase means expense recognized but cash not yet paid = source of cash"
+        },
+        "deferred_revenue": {
+          "formula": "CFS.ChangeInDefRev_t = +(BS.DeferredRev_t - BS.DeferredRev_{t-1})",
+          "logic": "Deferred revenue increase means cash received before revenue recognized = source of cash"
+        }
+      },
+      "criticality": "CRITICAL",
+      "common_errors": [
+        "Sign reversal — forgetting the negative sign for asset changes",
+        "Including non-operating items (e.g., changes in investment balances) in working capital",
+        "Not excluding acquisition-related balance changes from organic WC deltas"
+      ],
+      "failure_symptom": "CFO incorrect, cash tie-out fails, BS imbalance on cash line"
+    },
+    {
+      "id": "LINK-CFS-BS-002",
+      "name": "Debt Flows to Debt Balances",
+      "source": {
+        "statement": "CFS",
+        "section": "CFF",
+        "line_items": ["DebtIssuances", "DebtRepayments"]
+      },
+      "target": {
+        "statement": "BS",
+        "section": "Debt",
+        "line_items": ["ShortTermDebt", "LongTermDebt", "RevolverBalance"]
+      },
+      "relationship_type": "roll_forward",
+      "formula": "BS.DebtEnd_t = BS.DebtBegin_t + CFS.Issuances_t - abs(CFS.Repayments_t) + PIK_t",
+      "sign_note": "Issuances are positive CFF inflows. Repayments are negative CFF outflows. PIK is non-cash (not in CFF).",
+      "criticality": "HIGH",
+      "per_tranche": true,
+      "failure_symptom": "Debt balance incorrect, BS imbalance, interest expense calculated on wrong base"
+    },
+    {
+      "id": "LINK-CFS-BS-003",
+      "name": "Equity Flows to Equity Accounts",
+      "source": {
+        "statement": "CFS",
+        "section": "CFF",
+        "line_items": ["ShareRepurchases", "EquityIssuances", "DividendsPaid"]
+      },
+      "target": {
+        "statement": "BS",
+        "section": "Equity",
+        "line_items": ["TreasuryStock", "CommonStock_APIC", "RetainedEarnings"]
+      },
+      "relationship_type": "roll_forward",
+      "formulas": {
+        "treasury_stock": "BS.TreasuryStock_t = BS.TreasuryStock_{t-1} + CFS.ShareRepurchases_t",
+        "common_stock_apic": "BS.APIC_t = BS.APIC_{t-1} + EquityIssuanceProceeds_t + SBC_t + OptionExerciseProceeds_t",
+        "retained_earnings": "BS.RE_t = BS.RE_{t-1} + IS.NetIncome_t - Dividends_t"
+      },
+      "sign_note": "Share repurchases are negative CFF outflows and increase treasury stock (contra-equity). Equity issuances are positive CFF inflows.",
+      "criticality": "HIGH"
+    },
+    {
+      "id": "LINK-BS-IS-001",
+      "name": "Average Debt to Interest Expense",
+      "source": {
+        "statement": "BS",
+        "section": "Debt",
+        "line_items": ["DebtBegin", "DebtEnd"]
+      },
+      "target": {
+        "statement": "IS",
+        "line_item": "InterestExpense"
+      },
+      "relationship_type": "derived",
+      "formula": "IS.InterestExp_t = avg_balance(BS.DebtBegin_t, BS.DebtEnd_t) * Rate_t",
+      "expanded_formula": "IS.InterestExp_t = ((BS.DebtEnd_t + BS.DebtBegin_t) / 2) * AnnualRate * (DaysInPeriod / 360_or_365)",
+      "creates_circularity": true,
+      "circular_reference": "CIRC-INT-CASH-REV-001",
+      "sign_note": "Interest expense is negative on IS (reduces earnings). Per-tranche calculation using tranche-specific rates.",
+      "criticality": "CRITICAL",
+      "day_count_conventions": {
+        "30_360": "Each month = 30 days, year = 360. Common for corporate bonds.",
+        "actual_360": "Actual days in period / 360. Common for bank loans (SOFR-based).",
+        "actual_365": "Actual days in period / 365. Common for some fixed-rate instruments.",
+        "actual_actual": "Actual days / actual days in year. Government bonds."
+      },
+      "failure_symptom": "Interest expense wrong, NI wrong, RE wrong, BS imbalance"
+    },
+    {
+      "id": "LINK-CFS-BS-004",
+      "name": "Ending Cash Tie-Out",
+      "source": {
+        "statement": "CFS",
+        "line_item": "EndingCash"
+      },
+      "target": {
+        "statement": "BS",
+        "section": "CurrentAssets",
+        "line_item": "CashAndEquivalents"
+      },
+      "relationship_type": "equals",
+      "formula": "BS.Cash_t = CFS.EndingCash_t",
+      "sign_note": "This must be an exact equality, not a calculated value. BS cash should reference CFS ending cash directly.",
+      "criticality": "CRITICAL",
+      "implementation_note": "BS.Cash should be a direct cell reference to CFS.EndingCash, not an independent calculation. This ensures the tie-out is structural, not coincidental.",
+      "failure_symptom": "If CFS ending cash != BS cash, the model is structurally broken"
+    },
+    {
+      "id": "LINK-IS-CFS-003",
+      "name": "Stock-Based Compensation to CFO Add-Back",
+      "source": {
+        "statement": "IS",
+        "line_item": "StockBasedCompensation",
+        "description": "Non-cash operating expense"
+      },
+      "target": {
+        "statement": "CFS",
+        "section": "CFO",
+        "line_item": "AddBack_SBC"
+      },
+      "relationship_type": "derived",
+      "formula": "CFS.CFO.AddBack_SBC_t = IS.SBC_t",
+      "additional_target": {
+        "statement": "BS",
+        "section": "Equity",
+        "line_item": "APIC",
+        "formula": "BS.APIC_t += IS.SBC_t"
+      },
+      "sign_note": "SBC is negative on IS (expense), positive add-back on CFS, positive addition to APIC on BS.",
+      "criticality": "HIGH",
+      "three_statement_impact": {
+        "IS": "Operating expense reducing EBIT and Net Income",
+        "CFS_CFO": "Added back as non-cash charge",
+        "BS_Equity": "Increases APIC (Additional Paid-In Capital)"
+      }
+    },
+    {
+      "id": "LINK-IS-CFS-004",
+      "name": "Deferred Tax to CFO Adjustment",
+      "source": {
+        "statement": "SCHEDULE",
+        "line_item": "DeferredTaxExpense",
+        "description": "Non-cash portion of total tax expense"
+      },
+      "target": {
+        "statement": "CFS",
+        "section": "CFO",
+        "line_item": "AddBack_DeferredTax"
+      },
+      "relationship_type": "derived",
+      "formula": "CFS.CFO.DeferredTax_t = TaxSchedule.DeferredTaxExpense_t",
+      "sign_note": "Deferred tax expense (increase in DTL or decrease in DTA) is a non-cash charge added back in CFO. Deferred tax benefit (decrease in DTL or increase in DTA) is subtracted.",
+      "criticality": "MEDIUM"
+    },
+    {
+      "id": "LINK-SCHEDULE-IS-001",
+      "name": "PP&E Schedule D&A to IS",
+      "source": {
+        "statement": "SCHEDULE",
+        "schedule_name": "PPE_Schedule",
+        "line_item": "DepreciationExpense"
+      },
+      "target": {
+        "statement": "IS",
+        "line_item": "DepreciationAndAmortization"
+      },
+      "relationship_type": "equals",
+      "formula": "IS.DA_t = PPE_Schedule.Depreciation_t + Intangibles_Schedule.Amortization_t",
+      "single_source_of_truth": true,
+      "criticality": "CRITICAL"
+    },
+    {
+      "id": "LINK-SCHEDULE-BS-001",
+      "name": "Debt Schedule to BS",
+      "source": {
+        "statement": "SCHEDULE",
+        "schedule_name": "Debt_Schedule",
+        "line_item": "EndingBalance_PerTranche"
+      },
+      "target": {
+        "statement": "BS",
+        "section": "Liabilities",
+        "line_items": ["CurrentPortionLTD", "LongTermDebt", "RevolverBalance"]
+      },
+      "relationship_type": "equals",
+      "formula": "BS.Debt_t = SUM(DebtSchedule.EndingBalance_tranche_t for each tranche)",
+      "maturity_classification": "Amounts due within 12 months classified as current portion of long-term debt",
+      "criticality": "HIGH"
+    }
+  ],
+
+  "income_statement_rules": {
+    "structure": {
+      "id": "RULE-IS-STRUCTURE-001",
+      "description": "Canonical income statement structure from revenue to net income",
+      "line_items": [
+        {
+          "name": "Revenue",
+          "alias": ["Sales", "Net Revenue", "Total Revenue"],
+          "sign": "positive",
+          "forecast_methods": [
+            "Growth rate: Revenue_t = Revenue_{t-1} * (1 + g)",
+            "Volume x Price: Revenue_t = Units_t * ASP_t",
+            "Segment build-up: Revenue_t = SUM(Segment_Revenue_i_t)",
+            "Backlog conversion: Revenue_t = Backlog_{t-1} * ConversionRate + NewOrders_t * InPeriodConversion"
+          ]
+        },
+        {
+          "name": "Cost of Goods Sold (COGS)",
+          "sign": "negative",
+          "forecast_methods": [
+            "Gross margin: COGS_t = Revenue_t * (1 - GrossMargin%)",
+            "Cost build-up: COGS_t = Materials_t + Labor_t + Overhead_t + D&A_inCOGS_t"
+          ],
+          "includes": ["Direct materials", "Direct labor", "Manufacturing overhead", "D&A allocated to production"]
+        },
+        {
+          "name": "Gross Profit",
+          "formula": "GrossProfit_t = Revenue_t + COGS_t",
+          "sign": "positive (typically)",
+          "derived": true
+        },
+        {
+          "name": "Selling, General & Administrative (SG&A)",
+          "sign": "negative",
+          "forecast_methods": [
+            "Percent of revenue: SGA_t = Revenue_t * SGA%",
+            "Fixed + variable: SGA_t = FixedSGA + Revenue_t * VariableSGA%"
+          ]
+        },
+        {
+          "name": "Research & Development (R&D)",
+          "sign": "negative",
+          "forecast_methods": [
+            "Percent of revenue: RD_t = Revenue_t * RD%",
+            "Fixed budget: RD_t = Budget_t"
+          ],
+          "gaap_ifrs_note": "US GAAP expenses all R&D (ASC 730). IFRS capitalizes development costs meeting IAS 38 criteria."
+        },
+        {
+          "name": "Depreciation & Amortization (if separate line)",
+          "sign": "negative",
+          "source": "PP&E schedule + Intangibles schedule",
+          "note": "May be embedded in COGS and SG&A. If shown separately, ensure no double-counting."
+        },
+        {
+          "name": "Stock-Based Compensation (if separate line)",
+          "sign": "negative",
+          "source": "SBC schedule",
+          "note": "May be embedded in COGS, SG&A, R&D. If shown separately, ensure no double-counting."
+        },
+        {
+          "name": "Other Operating Income/Expense",
+          "sign": "variable",
+          "includes": ["Restructuring charges", "Impairment charges", "Gain/loss on disposal", "Litigation settlements"]
+        },
+        {
+          "name": "Operating Income (EBIT)",
+          "formula": "EBIT_t = GrossProfit_t + SGA_t + RD_t + DA_t + SBC_t + OtherOp_t",
+          "sign": "positive (typically)",
+          "derived": true
+        },
+        {
+          "name": "Interest Expense",
+          "sign": "negative",
+          "source": "Debt schedule (average balance * rate per tranche)",
+          "creates_circularity": true
+        },
+        {
+          "name": "Interest Income",
+          "sign": "positive",
+          "formula": "InterestIncome_t = avg_balance(Cash_t, Cash_{t-1}) * CashYield",
+          "note": "Often immaterial and can be set to zero or a simple assumption"
+        },
+        {
+          "name": "Other Non-Operating Income/Expense",
+          "sign": "variable",
+          "includes": ["FX gains/losses", "Investment gains/losses", "Equity method income"]
+        },
+        {
+          "name": "Earnings Before Tax (EBT)",
+          "formula": "EBT_t = EBIT_t + InterestExp_t + InterestInc_t + OtherNonOp_t",
+          "derived": true
+        },
+        {
+          "name": "Income Tax Expense",
+          "sign": "negative",
+          "formula": "TaxExp_t = CurrentTax_t + DeferredTax_t",
+          "source": "Tax schedule",
+          "components": {
+            "current_tax": "Cash taxes actually payable",
+            "deferred_tax": "Non-cash change in DTA/DTL balances"
+          }
+        },
+        {
+          "name": "Net Income",
+          "formula": "NI_t = EBT_t + TaxExp_t",
+          "derived": true,
+          "destination": ["CFS.CFO.StartingPoint", "BS.RetainedEarnings"]
+        },
+        {
+          "name": "Earnings Per Share (Basic)",
+          "formula": "BasicEPS_t = NI_t / WeightedAvgSharesBasic_t",
+          "unit": "currency_per_share"
+        },
+        {
+          "name": "Earnings Per Share (Diluted)",
+          "formula": "DilutedEPS_t = AdjustedNI_t / WeightedAvgSharesDiluted_t",
+          "unit": "currency_per_share",
+          "methods": ["Treasury Stock Method", "If-Converted Method"]
+        }
+      ]
+    }
+  },
+
+  "cash_flow_statement_rules": {
+    "method": "indirect",
+    "description": "The CFS reconciles net income to net cash generated. It is the most error-prone statement and must be constructed using strict rules.",
+    "sections": {
+      "cfo": {
+        "id": "RULE-CFS-CFO-001",
+        "name": "Cash Flow from Operations (CFO)",
+        "structure": [
+          {
+            "category": "starting_point",
+            "line_item": "Net Income",
+            "source": "IS.NetIncome",
+            "sign": "as_reported"
+          },
+          {
+            "category": "non_cash_adjustments",
+            "description": "Add back non-cash expenses, subtract non-cash gains",
+            "items": [
+              {
+                "name": "Depreciation & Amortization",
+                "sign_on_cfs": "positive (add back)",
+                "source": "PP&E Schedule + Intangibles Schedule",
+                "rationale": "Non-cash expense that reduced NI but did not use cash"
+              },
+              {
+                "name": "Stock-Based Compensation",
+                "sign_on_cfs": "positive (add back)",
+                "source": "SBC Schedule",
+                "rationale": "Non-cash expense recognized in IS"
+              },
+              {
+                "name": "Deferred Income Taxes",
+                "sign_on_cfs": "positive if expense, negative if benefit",
+                "source": "Tax Schedule",
+                "rationale": "Non-cash portion of tax expense (change in DTA/DTL)"
+              },
+              {
+                "name": "Amortization of Debt Issuance Costs / OID",
+                "sign_on_cfs": "positive (add back)",
+                "source": "Debt Schedule",
+                "rationale": "Non-cash interest expense component"
+              },
+              {
+                "name": "Impairment Charges",
+                "sign_on_cfs": "positive (add back)",
+                "source": "IS or Asset Schedule",
+                "rationale": "Non-cash write-down of asset values"
+              },
+              {
+                "name": "Gain on Sale of Assets",
+                "sign_on_cfs": "negative (subtract)",
+                "rationale": "Non-cash gain included in NI; actual cash proceeds appear in CFI"
+              },
+              {
+                "name": "Loss on Sale of Assets",
+                "sign_on_cfs": "positive (add back)",
+                "rationale": "Non-cash loss included in NI"
+              },
+              {
+                "name": "Loss on Extinguishment of Debt",
+                "sign_on_cfs": "positive (add back)",
+                "rationale": "Non-cash component (write-off of unamortized issuance costs/OID)"
+              },
+              {
+                "name": "PIK Interest Accrued",
+                "sign_on_cfs": "positive (add back)",
+                "source": "Debt Schedule",
+                "rationale": "Non-cash interest added to principal, not paid in cash"
+              },
+              {
+                "name": "Unrealized FX Gains/Losses",
+                "sign_on_cfs": "reverse sign",
+                "rationale": "Non-cash, mark-to-market adjustments"
+              }
+            ]
+          },
+          {
+            "category": "working_capital_changes",
+            "description": "Changes in operating assets and liabilities derived from BS deltas",
+            "rules": {
+              "operating_asset_increase": "Negative (use of cash)",
+              "operating_asset_decrease": "Positive (source of cash)",
+              "operating_liability_increase": "Positive (source of cash)",
+              "operating_liability_decrease": "Negative (use of cash)"
+            },
+            "items": [
+              {
+                "name": "Change in Accounts Receivable",
+                "formula": "-(BS.AR_t - BS.AR_{t-1})",
+                "asset_type": "operating_asset"
+              },
+              {
+                "name": "Change in Inventory",
+                "formula": "-(BS.Inventory_t - BS.Inventory_{t-1})",
+                "asset_type": "operating_asset"
+              },
+              {
+                "name": "Change in Prepaid Expenses",
+                "formula": "-(BS.Prepaid_t - BS.Prepaid_{t-1})",
+                "asset_type": "operating_asset"
+              },
+              {
+                "name": "Change in Other Current Assets",
+                "formula": "-(BS.OtherCA_t - BS.OtherCA_{t-1})",
+                "asset_type": "operating_asset"
+              },
+              {
+                "name": "Change in Accounts Payable",
+                "formula": "+(BS.AP_t - BS.AP_{t-1})",
+                "asset_type": "operating_liability"
+              },
+              {
+                "name": "Change in Accrued Liabilities",
+                "formula": "+(BS.AccruedLiab_t - BS.AccruedLiab_{t-1})",
+                "asset_type": "operating_liability"
+              },
+              {
+                "name": "Change in Deferred Revenue",
+                "formula": "+(BS.DeferredRev_t - BS.DeferredRev_{t-1})",
+                "asset_type": "operating_liability"
+              },
+              {
+                "name": "Change in Income Taxes Payable",
+                "formula": "+(BS.TaxPayable_t - BS.TaxPayable_{t-1})",
+                "asset_type": "operating_liability"
+              },
+              {
+                "name": "Change in Other Current Liabilities",
+                "formula": "+(BS.OtherCL_t - BS.OtherCL_{t-1})",
+                "asset_type": "operating_liability"
+              }
+            ]
+          }
+        ],
+        "total_formula": "CFO_t = NI_t + NonCashAdj_t + WC_Changes_t"
+      },
+      "cfi": {
+        "id": "RULE-CFS-CFI-001",
+        "name": "Cash Flow from Investing (CFI)",
+        "sign_discipline": "Outflows negative, inflows positive",
+        "items": [
+          {
+            "name": "Capital Expenditures",
+            "sign": "negative",
+            "source": "PP&E Schedule or management assumption",
+            "categories": {
+              "maintenance_capex": "Required to maintain existing asset base",
+              "growth_capex": "Discretionary investment in new capacity/capabilities"
+            }
+          },
+          {
+            "name": "Acquisitions",
+            "sign": "negative",
+            "net_of": "Cash acquired in acquisition",
+            "description": "Net cash paid for business combinations"
+          },
+          {
+            "name": "Proceeds from Asset Sales",
+            "sign": "positive",
+            "source": "Full cash proceeds, not just gain/loss",
+            "note": "Gain/loss is reversed in CFO; full proceeds appear here"
+          },
+          {
+            "name": "Purchases of Investments",
+            "sign": "negative",
+            "description": "Purchases of marketable securities, equity investments"
+          },
+          {
+            "name": "Proceeds from Investment Sales/Maturities",
+            "sign": "positive"
+          },
+          {
+            "name": "Capitalized Software Development",
+            "sign": "negative",
+            "gaap_ifrs_note": "IFRS capitalizes qualifying development costs; US GAAP generally expenses (except ASC 350-40 for internal-use software)"
+          },
+          {
+            "name": "Other Investing Activities",
+            "sign": "variable"
+          }
+        ],
+        "total_formula": "CFI_t = CapEx_t + Acquisitions_t + AssetSales_t + InvestmentPurchases_t + InvestmentSales_t + Other_t"
+      },
+      "cff": {
+        "id": "RULE-CFS-CFF-001",
+        "name": "Cash Flow from Financing (CFF)",
+        "sign_discipline": "Outflows negative, inflows positive",
+        "items": [
+          {
+            "name": "Debt Issuances (Proceeds)",
+            "sign": "positive",
+            "source": "Debt Schedule per tranche"
+          },
+          {
+            "name": "Debt Repayments",
+            "sign": "negative",
+            "includes": ["Mandatory amortization", "Optional prepayments", "Maturity repayments"],
+            "source": "Debt Schedule per tranche"
+          },
+          {
+            "name": "Revolver Draws / (Repayments)",
+            "sign": "net (positive if draw, negative if repayment)",
+            "source": "Revolver Schedule",
+            "note": "Often shown as net change in revolver balance"
+          },
+          {
+            "name": "Equity Issuances",
+            "sign": "positive",
+            "includes": ["IPO proceeds", "Secondary offerings", "Option exercise proceeds"]
+          },
+          {
+            "name": "Share Repurchases (Buybacks)",
+            "sign": "negative",
+            "target": "BS.TreasuryStock"
+          },
+          {
+            "name": "Dividends Paid",
+            "sign": "negative",
+            "includes": ["Common dividends", "Preferred dividends"],
+            "target": "BS.RetainedEarnings (reduces)"
+          },
+          {
+            "name": "Debt Issuance Costs Paid",
+            "sign": "negative",
+            "note": "Cash outflow when debt is issued. Amortized as non-cash expense over debt life."
+          },
+          {
+            "name": "Payment of Finance Lease Obligations",
+            "sign": "negative",
+            "note": "Principal portion of finance lease payments (ASC 842)"
+          },
+          {
+            "name": "Other Financing Activities",
+            "sign": "variable"
+          }
+        ],
+        "total_formula": "CFF_t = DebtIssuances_t + DebtRepayments_t + RevolverNet_t + EquityIssuances_t + Buybacks_t + Dividends_t + Other_t"
+      },
+      "fx_effect": {
+        "id": "RULE-CFS-FX-001",
+        "name": "Effect of Exchange Rate Changes on Cash",
+        "formula": "FX_Effect_t = ForeignCurrencyCash_t * (EndRate_t - BeginRate_t)",
+        "standards": ["ASC 830-230-45", "IAS 7.28"],
+        "description": "Separate line showing impact of exchange rate changes on foreign-currency denominated cash balances"
+      },
+      "ending_cash": {
+        "id": "RULE-CFS-ENDCASH-001",
+        "formula": "EndingCash_t = BeginningCash_t + CFO_t + CFI_t + CFF_t + FX_Effect_t",
+        "must_equal": "BS.CashAndEquivalents_t"
+      }
+    }
+  },
+
+  "balance_sheet_rules": {
+    "fundamental_constraint": {
+      "id": "CONSTRAINT-BS-BALANCE-001",
+      "equation": "Assets = Liabilities + Equity",
+      "tolerance": 1e-6,
+      "severity": "CRITICAL",
+      "enforcement": "Every period, every scenario. No exceptions."
+    },
+    "structure": {
+      "assets": {
+        "current_assets": [
+          {
+            "name": "Cash and Cash Equivalents",
+            "source": "CFS.EndingCash (MUST be direct reference, not independent calculation)",
+            "is_plug": true,
+            "plug_priority": 2,
+            "sign": "positive",
+            "constraint": "Cash >= 0 (if no revolver) or Cash >= MinCash (if revolver available)"
+          },
+          {
+            "name": "Short-Term Investments",
+            "forecast": "Management assumption or held constant",
+            "sign": "positive"
+          },
+          {
+            "name": "Accounts Receivable",
+            "source": "WC Schedule",
+            "forecast_formula": "(Revenue_t * DSO_t) / DaysInPeriod",
+            "sign": "positive"
+          },
+          {
+            "name": "Inventory",
+            "source": "WC Schedule",
+            "forecast_formula": "(COGS_t * DIO_t) / DaysInPeriod",
+            "sign": "positive"
+          },
+          {
+            "name": "Prepaid Expenses",
+            "source": "WC Schedule",
+            "forecast_formula": "SGA_t * PrepaidPct",
+            "sign": "positive"
+          },
+          {
+            "name": "Other Current Assets",
+            "forecast": "Percent of revenue or held constant",
+            "sign": "positive"
+          }
+        ],
+        "non_current_assets": [
+          {
+            "name": "Net PP&E",
+            "source": "PP&E Schedule (GrossPPE - AccumDepr)",
+            "sign": "positive"
+          },
+          {
+            "name": "Goodwill",
+            "source": "Goodwill Schedule",
+            "note": "Not amortized. Tested for impairment annually or when triggering events occur.",
+            "sign": "positive"
+          },
+          {
+            "name": "Intangible Assets (Net)",
+            "source": "Intangibles Schedule (Gross - AccumAmort)",
+            "sign": "positive"
+          },
+          {
+            "name": "Operating Lease Right-of-Use Assets",
+            "source": "Lease Schedule",
+            "standard": "ASC 842 / IFRS 16",
+            "sign": "positive"
+          },
+          {
+            "name": "Deferred Tax Assets (Non-Current)",
+            "source": "Tax Schedule",
+            "sign": "positive",
+            "net_of_va": "Net of Valuation Allowance"
+          },
+          {
+            "name": "Equity Method Investments",
+            "forecast": "Opening + Share of Income - Dividends Received",
+            "sign": "positive"
+          },
+          {
+            "name": "Other Non-Current Assets",
+            "forecast": "Percent of revenue or held constant",
+            "sign": "positive"
+          }
+        ],
+        "total_assets_formula": "TotalAssets_t = SUM(CurrentAssets_t) + SUM(NonCurrentAssets_t)"
+      },
+      "liabilities": {
+        "current_liabilities": [
+          {
+            "name": "Accounts Payable",
+            "source": "WC Schedule",
+            "forecast_formula": "(COGS_t * DPO_t) / DaysInPeriod",
+            "sign": "positive"
+          },
+          {
+            "name": "Accrued Liabilities",
+            "source": "WC Schedule",
+            "forecast_formula": "Base_t * AccruedPct",
+            "sign": "positive"
+          },
+          {
+            "name": "Deferred Revenue (Current)",
+            "source": "WC Schedule",
+            "forecast_formula": "Opening + Billings - Revenue_Recognized",
+            "sign": "positive"
+          },
+          {
+            "name": "Current Portion of Long-Term Debt",
+            "source": "Debt Schedule (mandatory amortization due within 12 months)",
+            "sign": "positive"
+          },
+          {
+            "name": "Current Operating Lease Liabilities",
+            "source": "Lease Schedule",
+            "sign": "positive"
+          },
+          {
+            "name": "Income Taxes Payable",
+            "source": "Tax Schedule",
+            "sign": "positive"
+          },
+          {
+            "name": "Revolver Balance",
+            "source": "Revolver Schedule",
+            "is_plug": true,
+            "plug_priority": 1,
+            "sign": "positive"
+          },
+          {
+            "name": "Other Current Liabilities",
+            "forecast": "Percent of revenue or held constant",
+            "sign": "positive"
+          }
+        ],
+        "non_current_liabilities": [
+          {
+            "name": "Long-Term Debt",
+            "source": "Debt Schedule (ending balance per tranche, net of current portion)",
+            "sign": "positive",
+            "presentation": "Net of unamortized OID and debt issuance costs (ASC 835-30)"
+          },
+          {
+            "name": "Non-Current Operating Lease Liabilities",
+            "source": "Lease Schedule",
+            "sign": "positive"
+          },
+          {
+            "name": "Deferred Tax Liabilities",
+            "source": "Tax Schedule",
+            "sign": "positive"
+          },
+          {
+            "name": "Pension / Post-Retirement Obligations",
+            "forecast": "Actuarial or simplified assumption",
+            "sign": "positive"
+          },
+          {
+            "name": "Other Non-Current Liabilities",
+            "forecast": "Percent of revenue or held constant",
+            "sign": "positive"
+          }
+        ],
+        "total_liabilities_formula": "TotalLiab_t = SUM(CurrentLiab_t) + SUM(NonCurrentLiab_t)"
+      },
+      "equity": {
+        "components": [
+          {
+            "name": "Common Stock (Par Value)",
+            "formula": "Shares_Outstanding_t * ParValue",
+            "sign": "positive",
+            "note": "Typically immaterial"
+          },
+          {
+            "name": "Additional Paid-In Capital (APIC)",
+            "roll_forward": "APIC_t = APIC_{t-1} + EquityIssuanceExcessOverPar_t + SBC_t + OptionExerciseExcess_t",
+            "sign": "positive"
+          },
+          {
+            "name": "Retained Earnings",
+            "roll_forward": "RE_t = RE_{t-1} + NI_t - Dividends_t +/- Adjustments_t",
+            "sign": "positive (can be negative = accumulated deficit)"
+          },
+          {
+            "name": "Accumulated Other Comprehensive Income (AOCI)",
+            "roll_forward": "AOCI_t = AOCI_{t-1} + OCI_t",
+            "sign": "variable",
+            "components": [
+              "Foreign currency translation adjustments (CTA)",
+              "Unrealized gains/losses on AFS securities",
+              "Pension/OPEB adjustments",
+              "Cash flow hedge gains/losses"
+            ]
+          },
+          {
+            "name": "Treasury Stock",
+            "roll_forward": "TreasuryStock_t = TreasuryStock_{t-1} + ShareRepurchases_t",
+            "sign": "negative (contra-equity)",
+            "method": "cost_method"
+          },
+          {
+            "name": "Non-Controlling Interests (NCI)",
+            "formula": "NCI_t = NCI_{t-1} + NCI_ShareOfNI_t - NCI_Dividends_t",
+            "sign": "positive",
+            "note": "Required for consolidated entities with minority shareholders"
+          }
+        ],
+        "total_equity_formula": "TotalEquity_t = CommonStock_t + APIC_t + RE_t + AOCI_t + TreasuryStock_t + NCI_t"
+      }
+    },
+    "plug_hierarchy": {
+      "id": "RULE-BS-PLUG-001",
+      "description": "Formal Financing Plug Policy determines how cash shortfalls are absorbed",
+      "priority_order": [
+        {
+          "priority": 1,
+          "plug": "Revolver",
+          "condition": "Revolver facility exists",
+          "logic": {
+            "shortfall": "If cash_pre_plug < MinCash, draw on revolver: Draw = min(MaxAvailability, MinCash - cash_pre_plug)",
+            "excess": "If cash_pre_plug > MinCash and RevolverBalance > 0, sweep: Sweep = min(RevolverBalance, cash_pre_plug - MinCash)",
+            "availability": "MaxAvailability = min(Commitment, BorrowingBase) - LettersOfCredit - ExistingDrawn"
+          }
+        },
+        {
+          "priority": 2,
+          "plug": "Cash",
+          "condition": "No revolver available or revolver fully drawn",
+          "logic": {
+            "normal": "Cash = CFS.EndingCash (can fluctuate freely above zero)",
+            "negative_cash_warning": "If Cash < 0, model indicates liquidity shortfall requiring explicit financing assumptions",
+            "severity": "CRITICAL warning if Cash < 0"
+          }
+        }
+      ],
+      "revolver_solving_sequence": [
+        "Step 1: Calculate pre-revolver cash (all CFS items except revolver draw/repay)",
+        "Step 2: Determine required revolver draw or sweep based on MinCash policy",
+        "Step 3: Constrain draw to available commitment",
+        "Step 4: Calculate interest on average revolver balance (creates circularity)",
+        "Step 5: Iterate to convergence (fixed-point iteration with damping)"
+      ]
+    }
+  },
+
+  "working_capital_mechanics": [
+    {
+      "id": "RULE-WC-AR-001",
+      "account": "Accounts Receivable",
+      "type": "operating_asset",
+      "driver": "Days Sales Outstanding (DSO)",
+      "driver_formula": "DSO = (AR / Revenue) * DaysInPeriod",
+      "balance_sheet_forecast": "(Revenue_t * DSO_t) / DaysInPeriod",
+      "cash_flow_impact": {
+        "direction": "Increase = Use of cash (Negative on CFS)",
+        "formula": "CFS.ChangeInAR_t = -(BS.AR_t - BS.AR_{t-1})"
+      },
+      "industry_benchmarks": {
+        "technology_saas": "30-60 days",
+        "manufacturing": "40-65 days",
+        "retail": "3-10 days",
+        "healthcare": "45-75 days",
+        "professional_services": "50-80 days",
+        "telecom": "35-55 days"
+      },
+      "sensitivity": "A 1-day increase in DSO on $1B revenue ≈ $2.74M additional cash tied up (assuming 365 days)"
+    },
+    {
+      "id": "RULE-WC-INV-001",
+      "account": "Inventory",
+      "type": "operating_asset",
+      "driver": "Days Inventory Outstanding (DIO)",
+      "driver_formula": "DIO = (Inventory / COGS) * DaysInPeriod",
+      "balance_sheet_forecast": "(COGS_t * DIO_t) / DaysInPeriod",
+      "cash_flow_impact": {
+        "direction": "Increase = Use of cash (Negative on CFS)",
+        "formula": "CFS.ChangeInInventory_t = -(BS.Inventory_t - BS.Inventory_{t-1})"
+      },
+      "industry_benchmarks": {
+        "technology_hardware": "30-60 days",
+        "manufacturing": "50-90 days",
+        "retail_grocery": "20-35 days",
+        "retail_apparel": "60-120 days",
+        "automotive": "40-70 days",
+        "pharmaceutical": "60-120 days"
+      },
+      "note": "COGS used as denominator (not revenue) because inventory is carried at cost"
+    },
+    {
+      "id": "RULE-WC-AP-001",
+      "account": "Accounts Payable",
+      "type": "operating_liability",
+      "driver": "Days Payable Outstanding (DPO)",
+      "driver_formula": "DPO = (AP / COGS) * DaysInPeriod",
+      "balance_sheet_forecast": "(COGS_t * DPO_t) / DaysInPeriod",
+      "cash_flow_impact": {
+        "direction": "Increase = Source of cash (Positive on CFS)",
+        "formula": "CFS.ChangeInAP_t = +(BS.AP_t - BS.AP_{t-1})"
+      },
+      "industry_benchmarks": {
+        "technology": "35-60 days",
+        "manufacturing": "40-65 days",
+        "retail": "30-50 days",
+        "healthcare": "35-55 days"
+      },
+      "note": "COGS used as denominator for consistency with inventory"
+    },
+    {
+      "id": "RULE-WC-PREPAID-001",
+      "account": "Prepaid Expenses",
+      "type": "operating_asset",
+      "driver": "Percent of SG&A or relevant expense base",
+      "balance_sheet_forecast": "SGA_t * PrepaidPct",
+      "cash_flow_impact": {
+        "direction": "Increase = Use of cash (Negative on CFS)",
+        "formula": "CFS.ChangeInPrepaid_t = -(BS.Prepaid_t - BS.Prepaid_{t-1})"
+      },
+      "common_items": ["Prepaid insurance", "Prepaid rent", "Prepaid software licenses"]
+    },
+    {
+      "id": "RULE-WC-ACCRUED-001",
+      "account": "Accrued Liabilities",
+      "type": "operating_liability",
+      "driver": "Percent of relevant expense base (SG&A, total OpEx, or payroll)",
+      "balance_sheet_forecast": "Base_t * AccruedPct",
+      "cash_flow_impact": {
+        "direction": "Increase = Source of cash (Positive on CFS)",
+        "formula": "CFS.ChangeInAccrued_t = +(BS.AccruedLiab_t - BS.AccruedLiab_{t-1})"
+      },
+      "common_items": ["Accrued payroll", "Accrued bonuses", "Accrued interest", "Accrued taxes", "Warranty reserves"]
+    },
+    {
+      "id": "RULE-WC-DEFREV-001",
+      "account": "Deferred Revenue",
+      "type": "operating_liability",
+      "driver": "Billings vs Revenue Recognition",
+      "balance_sheet_forecast": "DeferredRev_{t-1} + Billings_t - RevenueRecognized_t",
+      "cash_flow_impact": {
+        "direction": "Increase = Source of cash (Positive on CFS)",
+        "formula": "CFS.ChangeInDefRev_t = +(BS.DeferredRev_t - BS.DeferredRev_{t-1})"
+      },
+      "asc_606_considerations": [
+        "Revenue recognized when performance obligation is satisfied",
+        "Contract assets (unbilled receivables) arise when revenue > billings",
+        "Contract liabilities (deferred revenue) arise when billings > revenue",
+        "Variable consideration requires constraint estimation"
+      ],
+      "common_in": ["SaaS companies (annual subscriptions billed upfront)", "Media/entertainment (season tickets)", "Construction (milestone billing)"]
+    },
+    {
+      "id": "RULE-WC-CCC-001",
+      "name": "Cash Conversion Cycle",
+      "formula": "CCC = DSO + DIO - DPO",
+      "interpretation": "Number of days between paying for inventory and collecting cash from customers",
+      "optimization": "Lower CCC = better working capital efficiency. Negative CCC means company collects before paying (e.g., Amazon).",
+      "components": {
+        "dso": "Days to collect receivables",
+        "dio": "Days inventory held before sale",
+        "dpo": "Days to pay suppliers"
+      }
+    }
+  ],
+
+  "fixed_and_intangible_asset_rules": [
+    {
+      "id": "RULE-PPE-001",
+      "name": "PP&E Roll-Forward",
+      "description": "Property, Plant & Equipment must be modeled with separate roll-forwards for Gross PP&E and Accumulated Depreciation",
+      "roll_forward": {
+        "gross_ppe": {
+          "formula": "GrossPPE_t = GrossPPE_{t-1} + CapEx_t + AcquiredAssets_t - GrossCostDisposals_t",
+          "components": {
+            "capex": "Capital expenditures (maintenance + growth)",
+            "acquired_assets": "Fair value of PP&E from acquisitions (PPA)",
+            "disposals": "Original cost of assets sold or retired"
+          }
+        },
+        "accumulated_depreciation": {
+          "formula": "AccumDepr_t = AccumDepr_{t-1} + DeprExpense_t - AccumDeprDisposals_t",
+          "components": {
+            "depreciation_expense": "Current period depreciation from schedule",
+            "disposals": "Accumulated depreciation on disposed assets (removed)"
+          }
+        },
+        "net_ppe": {
+          "formula": "NetPPE_t = GrossPPE_t - AccumDepr_t"
+        }
+      },
+      "depreciation_methods": [
+        {
+          "name": "Straight-Line",
+          "formula": "DeprExp = (Cost - ResidualValue) / UsefulLife",
+          "usage": "Most common. Required for financial reporting by many companies."
+        },
+        {
+          "name": "Double Declining Balance",
+          "formula": "DeprExp = (2 / UsefulLife) * NetBookValue_{t-1}",
+          "usage": "Accelerated method. Switches to straight-line when SL > DDB."
+        },
+        {
+          "name": "Units of Production",
+          "formula": "DeprExp = (Cost - ResidualValue) * (UnitsProduced / TotalEstimatedUnits)",
+          "usage": "Mining, oil & gas, manufacturing equipment with measurable output."
+        },
+        {
+          "name": "Sum of Years Digits",
+          "formula": "DeprExp = (Cost - ResidualValue) * (RemainingLife / SumOfYears)",
+          "usage": "Accelerated method, less common."
+        }
+      ],
+      "useful_life_ranges": {
+        "buildings": "20-40 years",
+        "machinery_and_equipment": "5-15 years",
+        "vehicles": "3-7 years",
+        "furniture_and_fixtures": "5-10 years",
+        "computer_equipment": "3-5 years",
+        "leasehold_improvements": "Shorter of useful life or lease term",
+        "land": "Not depreciated"
+      },
+      "disposal_accounting": {
+        "step_1": "Remove gross cost from Gross PP&E",
+        "step_2": "Remove accumulated depreciation on disposed asset",
+        "step_3": "Calculate gain/loss: Proceeds - NBV (where NBV = GrossCost - AccumDepr)",
+        "step_4": "Record gain/loss on IS (other operating income/expense)",
+        "step_5": "Record full cash proceeds in CFI (investing activities)",
+        "step_6": "Reverse non-cash gain/loss in CFO (operating activities)"
+      },
+      "impairment": {
+        "us_gaap": {
+          "standard": "ASC 360-10",
+          "trigger": "Events or changes in circumstances indicating carrying amount may not be recoverable",
+          "test": "Step 1: Recoverability test (undiscounted cash flows vs carrying amount). Step 2: If fails, impairment = carrying amount - fair value.",
+          "reversal": "NOT permitted under US GAAP"
+        },
+        "ifrs": {
+          "standard": "IAS 36",
+          "test": "Impairment = carrying amount - recoverable amount (higher of fair value less costs to sell and value in use)",
+          "reversal": "Permitted for PP&E (not for goodwill). Reversal limited to original carrying amount less depreciation."
+        }
+      },
+      "fully_depreciated_assets": "Remain on BS (gross cost and accumulated depreciation) until physically disposed of. NBV = 0. No further depreciation expense.",
+      "construction_in_progress": {
+        "treatment": "Capitalized as CIP on BS, not depreciated until asset is placed in service",
+        "capitalized_interest": "Interest costs during construction may be capitalized (ASC 835-20)"
+      }
+    },
+    {
+      "id": "RULE-INTANGIBLES-001",
+      "name": "Intangible Assets",
+      "categories": {
+        "finite_lived": {
+          "examples": ["Customer relationships", "Technology", "Trade names (definite)", "Patents", "Licenses", "Non-compete agreements"],
+          "treatment": "Amortized over useful life (typically straight-line)",
+          "roll_forward": "NetIntangible_t = NetIntangible_{t-1} - Amortization_t + Acquisitions_t - Impairment_t",
+          "impairment": "Same as PP&E (ASC 360 / IAS 36)"
+        },
+        "indefinite_lived": {
+          "examples": ["Certain trade names/brands", "Spectrum licenses"],
+          "treatment": "NOT amortized. Tested for impairment annually.",
+          "impairment_test": "Fair value compared to carrying amount"
+        }
+      }
+    },
+    {
+      "id": "RULE-GOODWILL-001",
+      "name": "Goodwill",
+      "definition": "Excess of purchase price over fair value of identifiable net assets acquired",
+      "formula": "Goodwill = PurchasePrice - FairValueOfNetAssetsAcquired",
+      "treatment": "NOT amortized. Tested for impairment at least annually.",
+      "impairment_test": {
+        "us_gaap": {
+          "standard": "ASC 350",
+          "method": "One-step test (ASU 2017-04): Impairment = CarryingAmount_ReportingUnit - FairValue_ReportingUnit, limited to goodwill allocated to that unit",
+          "reversal": "NOT permitted"
+        },
+        "ifrs": {
+          "standard": "IAS 36",
+          "method": "Allocated to cash-generating units (CGUs). Impairment if carrying amount of CGU > recoverable amount.",
+          "reversal": "NOT permitted for goodwill"
+        }
+      },
+      "roll_forward": "Goodwill_t = Goodwill_{t-1} + NewAcquisitions_t - Impairment_t - Disposals_t + FXAdjustments_t"
+    }
+  ],
+
+  "taxation_rules": [
+    {
+      "id": "RULE-TAX-TOTAL-001",
+      "name": "Total Tax Expense",
+      "formula": "TotalTaxExpense_t = CurrentTaxExpense_t + DeferredTaxExpense_t",
+      "standard": "ASC 740",
+      "components": {
+        "current_tax": {
+          "description": "Taxes actually payable to taxing authorities for the current period",
+          "formula": "CurrentTax_t = max(0, (TaxableIncome_t - NOL_Utilized_t)) * StatutoryRate",
+          "cash_impact": "Reduces cash. Reflected in CFO as cash taxes paid.",
+          "balance_sheet": "Income taxes payable (current liability)"
+        },
+        "deferred_tax": {
+          "description": "Non-cash change in DTA/DTL balances arising from temporary differences",
+          "formula": "DeferredTaxExp_t = (DTL_t - DTL_{t-1}) - (DTA_t - DTA_{t-1})",
+          "cash_impact": "Non-cash. Added back / subtracted in CFO.",
+          "balance_sheet": "DTA (non-current asset) and DTL (non-current liability)"
+        }
+      }
+    },
+    {
+      "id": "RULE-TAX-DTA_DTL-001",
+      "name": "Deferred Tax Assets and Liabilities",
+      "description": "Arise from temporary differences between book and tax treatment of items",
+      "dta_sources": [
+        {
+          "item": "Net Operating Loss (NOL) Carryforwards",
+          "description": "Tax losses that can offset future taxable income"
+        },
+        {
+          "item": "Accrued Expenses",
+          "description": "Expenses recognized for book but not yet deductible for tax (e.g., warranty reserves, litigation accruals)"
+        },
+        {
+          "item": "Deferred Revenue",
+          "description": "Cash received and taxable but not yet recognized as book revenue"
+        },
+        {
+          "item": "Stock-Based Compensation",
+          "description": "Book expense recognized over vesting; tax deduction at exercise/vesting"
+        },
+        {
+          "item": "Allowance for Doubtful Accounts",
+          "description": "Book expense for bad debts; tax deduction when actually written off"
+        },
+        {
+          "item": "Operating Lease Liabilities",
+          "description": "ASC 842 lease liability creates a DTA when liability > ROU asset"
+        },
+        {
+          "item": "Tax Credit Carryforwards",
+          "description": "R&D credits, foreign tax credits not yet utilized"
+        }
+      ],
+      "dtl_sources": [
+        {
+          "item": "Depreciation Timing Differences",
+          "description": "Tax depreciation (MACRS) faster than book depreciation (straight-line)"
+        },
+        {
+          "item": "Prepaid Expenses",
+          "description": "Deducted for tax when paid; recognized as expense over time for book"
+        },
+        {
+          "item": "Installment Sales",
+          "description": "Revenue recognized for book at sale; taxed as cash collected"
+        },
+        {
+          "item": "Capitalized Interest",
+          "description": "Capitalized for book; may be deducted currently for tax"
+        },
+        {
+          "item": "Intangible Assets (Acquisition)",
+          "description": "Amortizable for tax (Section 197); may have different book treatment"
+        },
+        {
+          "item": "Operating Lease ROU Assets",
+          "description": "ROU asset > lease liability can create DTL"
+        }
+      ],
+      "permanent_differences": {
+        "description": "Items that differ between book and tax permanently (never reverse)",
+        "examples": [
+          "Non-deductible executive compensation (IRC 162(m) > $1M)",
+          "Non-deductible penalties and fines",
+          "Tax-exempt municipal bond interest income",
+          "Non-deductible meals and entertainment (50% limitation)",
+          "Goodwill impairment (if tax goodwill basis differs)",
+          "Non-deductible stock-based compensation (ISO spread)"
+        ],
+        "impact": "Cause effective tax rate to differ from statutory rate"
+      }
+    },
+    {
+      "id": "RULE-TAX-NOL-001",
+      "name": "Net Operating Loss (NOL) Carryforward",
+      "description": "Tax losses that can be carried forward to offset future taxable income",
+      "pre_tcja_rules": {
+        "effective_before": "2018-01-01",
+        "carryback": "2 years",
+        "carryforward": "20 years",
+        "limitation": "Can offset 100% of taxable income",
+        "note": "CARES Act (2020) temporarily allowed 5-year carryback for 2018-2020 NOLs"
+      },
+      "post_tcja_rules": {
+        "effective_after": "2017-12-31",
+        "carryback": "Not permitted (with exceptions for farming losses)",
+        "carryforward": "Indefinite",
+        "limitation": "Limited to 80% of taxable income in any given year",
+        "formula": "NOL_Utilized_t = min(NOL_Available_t, 0.80 * TaxableIncome_PreNOL_t)",
+        "remaining_nol": "NOL_Remaining_t = NOL_Available_t - NOL_Utilized_t"
+      },
+      "vintage_tracking": {
+        "description": "Track NOLs by vintage year to properly apply pre/post-TCJA rules and expiration",
+        "schema": {
+          "vintage_year": "Year the NOL was generated",
+          "original_amount": "Original NOL amount",
+          "utilized_to_date": "Cumulative utilization",
+          "remaining_balance": "Available for future use",
+          "expiration_year": "Pre-TCJA: vintage + 20; Post-TCJA: indefinite",
+          "limitation_rule": "Pre-TCJA: 100%; Post-TCJA: 80%"
+        }
+      },
+      "section_382_limitation": {
+        "trigger": "Greater than 50% ownership change within a 3-year testing period",
+        "annual_limit": "FMV_of_company_before_change * Long_Term_Tax_Exempt_Rate",
+        "description": "Limits the annual use of pre-change NOLs to prevent trafficking in loss companies",
+        "modeling_impact": "Must track Section 382 limitation separately from the 80% TCJA limitation"
+      },
+      "balance_sheet_impact": {
+        "dta": "NOL carryforward creates a DTA at the statutory tax rate",
+        "formula": "DTA_NOL_t = NOL_Remaining_t * StatutoryTaxRate",
+        "valuation_allowance": "Required if more likely than not (>50%) that some or all DTA will not be realized"
+      },
+      "cash_flow_impact": {
+        "description": "NOL utilization reduces current cash taxes paid",
+        "formula": "CashTaxSavings_t = NOL_Utilized_t * StatutoryTaxRate",
+        "cfo_effect": "Increases CFO by reducing cash tax payments"
+      }
+    },
+    {
+      "id": "RULE-TAX-VA-001",
+      "name": "Valuation Allowance",
+      "standard": "ASC 740-10-30",
+      "description": "Contra-asset recorded against DTA if it is more likely than not (>50% probability) that some or all DTA will not be realized",
+      "assessment_factors": {
+        "negative_evidence": [
+          "Cumulative losses in recent years (3-year cumulative loss is strong negative evidence)",
+          "History of NOL/credit expiration",
+          "Losses expected in early future years",
+          "Unsettled circumstances that may adversely affect future operations"
+        ],
+        "positive_evidence": [
+          "Existing contracts or firm sales backlog",
+          "Excess of appreciated asset FV over tax basis",
+          "Strong earnings history exclusive of the loss that created the DTA",
+          "Tax planning strategies that would accelerate taxable income"
+        ]
+      },
+      "formula": "NetDTA_t = GrossDTA_t - ValuationAllowance_t",
+      "modeling_impact": "Change in VA hits tax expense (IS) and DTA (BS). Increasing VA increases tax expense; decreasing VA decreases tax expense."
+    },
+    {
+      "id": "RULE-TAX-RATE-001",
+      "name": "Tax Rate Reconciliation",
+      "statutory_rate": {
+        "us_federal": 0.21,
+        "description": "Post-TCJA (2018+) US federal corporate income tax rate"
+      },
+      "effective_rate_formula": "EffectiveRate = TotalTaxExpense / EBT",
+      "reconciliation_items": [
+        "State and local income taxes (net of federal benefit)",
+        "Non-deductible executive compensation (IRC 162(m))",
+        "Non-deductible stock-based compensation",
+        "R&D tax credits",
+        "Foreign tax rate differential (GILTI, FDII)",
+        "Tax-exempt income",
+        "Non-deductible penalties/fines",
+        "Change in valuation allowance",
+        "Return-to-provision adjustments"
+      ],
+      "international_provisions": {
+        "gilti": {
+          "name": "Global Intangible Low-Taxed Income",
+          "description": "Minimum tax on foreign earnings exceeding 10% return on tangible assets",
+          "rate": "Effectively ~10.5% (50% deduction on 21% rate)"
+        },
+        "beat": {
+          "name": "Base Erosion and Anti-Abuse Tax",
+          "description": "Alternative minimum tax on certain payments to foreign related parties",
+          "rate": "10% (increased to 12.5% after 2025)"
+        },
+        "fdii": {
+          "name": "Foreign-Derived Intangible Income",
+          "description": "Reduced rate on income from serving foreign markets",
+          "effective_rate": "13.125% (37.5% deduction on 21% rate)"
+        }
+      }
+    }
+  ],
+
+  "debt_and_financing_rules": [
+    {
+      "id": "RULE-DEBT-REVOLVER-001",
+      "name": "Revolving Credit Facility",
+      "description": "The revolver acts as the primary financing plug, absorbing cash shortfalls and sweeping excess cash",
+      "key_formulas": {
+        "availability": "MaxAvailability_t = min(TotalCommitment, BorrowingBase_t) - LettersOfCredit_t",
+        "draw_logic": "If cash_pre_plug_t < MinCash: Draw_t = min(MaxAvailability_t - Drawn_{t-1}, MinCash - cash_pre_plug_t)",
+        "sweep_logic": "If cash_pre_plug_t > MinCash and Drawn_{t-1} > 0: Sweep_t = min(Drawn_{t-1}, cash_pre_plug_t - MinCash)",
+        "ending_balance": "RevolverBalance_t = RevolverBalance_{t-1} + Draw_t - Sweep_t"
+      },
+      "interest": {
+        "drawn_rate": "SOFR + Spread (typically 150-350 bps)",
+        "formula": "DrawnInterest_t = avg(RevolverBalance_t, RevolverBalance_{t-1}) * (SOFR_t + Spread)",
+        "creates_circularity": true
+      },
+      "commitment_fee": {
+        "description": "Fee on undrawn portion of the commitment",
+        "formula": "CommitmentFee_t = (TotalCommitment - avg(Drawn_t, Drawn_{t-1})) * FeeRate",
+        "typical_rate": "0.25% to 0.50%",
+        "cross_statement": "IS: Other expense below EBIT or within interest. CFS: Included in CFO."
+      },
+      "cross_statement_impact": {
+        "IS": "Interest expense on drawn balance + commitment fee on undrawn balance",
+        "CFS_CFF": "Net draw/sweep flows through financing activities",
+        "BS": "Current liability (typically classified as current due to revolver nature)"
+      }
+    },
+    {
+      "id": "RULE-DEBT-TRANCHE-001",
+      "name": "Term Loan / Bond Tranche Schedule",
+      "description": "Each debt tranche requires its own roll-forward schedule",
+      "roll_forward": {
+        "formula": "Closing_t = Opening_t + NewIssuances_t + PIK_t - MandatoryAmort_t - OptionalPrepay_t",
+        "components": {
+          "opening_balance": "Prior period ending balance (carrying value)",
+          "new_issuances": "New debt raised at par (or net of OID)",
+          "pik_interest": "Payment-in-Kind interest added to principal (non-cash)",
+          "mandatory_amortization": "Scheduled principal payments per credit agreement",
+          "optional_prepayments": "Discretionary prepayments (may have penalties)",
+          "maturity_repayment": "Bullet payment at maturity of remaining balance"
+        }
+      },
+      "tranche_types": {
+        "term_loan_a": {
+          "description": "Amortizing term loan, typically held by banks",
+          "amortization": "Quarterly mandatory amortization (5-10% per year), bullet at maturity",
+          "rate": "Floating (SOFR + 150-250 bps)",
+          "maturity": "5-7 years"
+        },
+        "term_loan_b": {
+          "description": "Institutional term loan, minimal amortization",
+          "amortization": "1% annual mandatory amortization, bullet at maturity",
+          "rate": "Floating (SOFR + 250-450 bps)",
+          "maturity": "6-8 years",
+          "excess_cash_flow_sweep": "25-75% of excess cash flow (with leverage-based step-downs)"
+        },
+        "senior_secured_notes": {
+          "description": "Fixed-rate bonds with security interest",
+          "amortization": "None (bullet at maturity)",
+          "rate": "Fixed (5-8%)",
+          "maturity": "5-10 years",
+          "call_protection": "Non-call period (2-5 years), then callable at premium declining to par"
+        },
+        "senior_unsecured_notes": {
+          "description": "Fixed-rate bonds without security interest",
+          "rate": "Fixed (6-10%)",
+          "maturity": "7-10 years"
+        },
+        "subordinated_notes": {
+          "description": "Junior debt, higher risk, higher return",
+          "rate": "Fixed (8-12%) or cash + PIK",
+          "maturity": "8-12 years"
+        },
+        "mezzanine_debt": {
+          "description": "Subordinated debt, often with equity kicker (warrants)",
+          "rate": "Cash (6-10%) + PIK (2-6%)",
+          "maturity": "7-10 years",
+          "equity_component": "Warrants or conversion feature"
+        }
+      },
+      "interest_calculation": {
+        "fixed_rate": {
+          "formula": "Interest_t = AvgBalance_t * FixedRate * (DaysInPeriod / DayCountBasis)"
+        },
+        "floating_rate": {
+          "formula": "Interest_t = AvgBalance_t * (SOFR_t + Spread) * (DaysInPeriod / 360)",
+          "note": "SOFR replaced LIBOR as of June 30, 2023",
+          "floor": "Many loans have SOFR floors (e.g., 0.50% or 1.00%)"
+        },
+        "pik_interest": {
+          "formula": "PIK_t = AvgBalance_t * PIKRate * (DaysInPeriod / DayCountBasis)",
+          "cross_statement": {
+            "IS": "Included in interest expense (non-cash)",
+            "CFS_CFO": "Added back as non-cash charge in CFO",
+            "BS": "Increases debt principal balance"
+          }
+        }
+      },
+      "presentation": {
+        "oid": {
+          "description": "Original Issue Discount presented as contra-liability reducing carrying value",
+          "amortization": "Effective interest method over life of debt",
+          "formula": "OIDAmort_t = CarryingValue_{t-1} * EffectiveRate - CashInterest_t",
+          "cross_statement": "IS: Part of interest expense. CFS: Added back in CFO (non-cash). BS: Increases carrying value toward par."
+        },
+        "debt_issuance_costs": {
+          "standard": "ASC 835-30 / ASU 2015-03",
+          "description": "Presented as direct deduction from debt carrying amount (not a separate asset)",
+          "amortization": "Effective interest method or straight-line",
+          "cross_statement": "IS: Part of interest expense. CFS: Added back in CFO (non-cash). BS: Increases carrying value toward par."
+        }
+      }
+    },
+    {
+      "id": "RULE-DEBT-COVENANTS-001",
+      "name": "Financial Covenant Testing",
+      "description": "Covenants must be tested each period as constraints",
+      "common_covenants": [
+        {
+          "name": "Maximum Leverage Ratio",
+          "formula": "TotalDebt_t / LTM_EBITDA_t <= MaxLeverage",
+          "typical_threshold": "4.0x - 6.0x",
+          "notes": "Often uses 'Adjusted EBITDA' per credit agreement definition"
+        },
+        {
+          "name": "Minimum Interest Coverage Ratio",
+          "formula": "LTM_EBITDA_t / LTM_InterestExpense_t >= MinCoverage",
+          "typical_threshold": "2.0x - 3.0x"
+        },
+        {
+          "name": "Fixed Charge Coverage Ratio",
+          "formula": "(LTM_EBITDA_t - CapEx_t - CashTaxes_t) / (InterestExp_t + MandatoryAmort_t) >= MinFCCR",
+          "typical_threshold": "1.0x - 1.5x"
+        },
+        {
+          "name": "Maximum Capital Expenditure",
+          "formula": "CapEx_t <= MaxCapEx",
+          "typical_threshold": "Negotiated annual limit"
+        },
+        {
+          "name": "Minimum Liquidity",
+          "formula": "Cash_t + RevolverAvailability_t >= MinLiquidity",
+          "typical_threshold": "Varies by company size"
+        }
+      ],
+      "modeling_as_constraint": {
+        "type": "CONSTRAINT",
+        "severity": "WARNING",
+        "on_violation": "Flag for user review; do not auto-cure"
+      }
+    },
+    {
+      "id": "RULE-DEBT-CASHSWEEP-001",
+      "name": "Excess Cash Flow Sweep",
+      "description": "Mandatory prepayment from excess cash flow, common in leveraged loans",
+      "formula": {
+        "excess_cash_flow": "ECF = EBITDA - CashInterest - CashTaxes - CapEx - MandatoryAmort - WC_Increase",
+        "sweep_amount": "Sweep = ECF * SweepPercentage",
+        "leverage_step_downs": [
+          {"leverage_below": 4.0, "sweep_pct": 0.25},
+          {"leverage_below": 3.5, "sweep_pct": 0.00},
+          {"leverage_above": 4.0, "sweep_pct": 0.50},
+          {"leverage_above": 5.0, "sweep_pct": 0.75}
+        ]
+      },
+      "application": "Applied against term loan balance in order of maturity (TLA before TLB)"
+    }
+  ],
+
+  "equity_and_eps_rules": [
+    {
+      "id": "RULE-EQUITY-ROLLFORWARD-001",
+      "name": "Equity Roll-Forward",
+      "description": "Reconcile each equity component period over period",
+      "components": {
+        "common_stock": {
+          "roll_forward": "CommonStock_t = CommonStock_{t-1} + NewShares_t * ParValue",
+          "note": "Typically immaterial due to low par values"
+        },
+        "apic": {
+          "roll_forward": "APIC_t = APIC_{t-1} + EquityIssuanceExcessPar_t + SBC_Expense_t + OptionExerciseExcess_t - ExcessTaxBenefitPreASU2016_09",
+          "major_drivers": ["Equity issuances", "Stock-based compensation", "Option exercises"]
+        },
+        "retained_earnings": {
+          "roll_forward": "RE_t = RE_{t-1} + NetIncome_t - CommonDividends_t - PreferredDividends_t +/- CumulativeAdjustments_t",
+          "important": "This is the primary link between IS and BS equity"
+        },
+        "aoci": {
+          "roll_forward": "AOCI_t = AOCI_{t-1} + OCI_t",
+          "oci_components": [
+            "Foreign currency translation adjustments",
+            "Unrealized gains/losses on AFS debt securities",
+            "Pension/OPEB funded status adjustments",
+            "Cash flow hedge gains/losses",
+            "Credit losses on AFS debt securities"
+          ]
+        },
+        "treasury_stock": {
+          "roll_forward": "TreasuryStock_t = TreasuryStock_{t-1} - ShareRepurchases_t + ShareReissuances_t",
+          "sign": "Contra-equity (negative). Repurchases increase the contra (more negative).",
+          "method": "Cost method (most common): Record at repurchase cost",
+          "cost_method_note": "Under cost method, treasury stock debited at repurchase price. On reissuance, if price > cost, excess goes to APIC. If price < cost, difference reduces APIC then RE."
+        },
+        "nci": {
+          "roll_forward": "NCI_t = NCI_{t-1} + NCI_ShareOfNI_t - NCI_Dividends_t + NCI_OCI_t",
+          "description": "Non-controlling interests in consolidated subsidiaries"
+        }
+      },
+      "total_equity": "TotalEquity_t = CommonStock_t + APIC_t + RE_t + AOCI_t + TreasuryStock_t + NCI_t"
+    },
+    {
+      "id": "RULE-EQUITY-SBC-001",
+      "name": "Stock-Based Compensation",
+      "description": "SBC is a non-cash operating expense with specific three-statement impacts",
+      "measurement": {
+        "standard": "ASC 718 (US GAAP) / IFRS 2",
+        "basis": "Grant-date fair value",
+        "options_valuation": "Black-Scholes or lattice model",
+        "rsus_valuation": "Stock price on grant date * number of units",
+        "performance_based": "Probability-weighted fair value based on expected achievement"
+      },
+      "vesting_schedule": {
+        "time_based": "Typically 3-4 year vesting (cliff or ratable)",
+        "performance_based": "Vesting contingent on financial or operational metrics",
+        "market_based": "Vesting contingent on stock price targets (TSR awards)"
+      },
+      "three_statement_impact": {
+        "IS": "SBC_expense reduces operating income. May be allocated across COGS, R&D, SG&A.",
+        "CFS_CFO": "Added back as non-cash charge (positive adjustment to CFO)",
+        "BS_Equity": "Increases APIC (Additional Paid-In Capital)",
+        "formula_linkage": {
+          "IS": "IS.SBC_Expense_t (negative, reduces income)",
+          "CFS": "CFS.CFO.AddBack_SBC_t = abs(IS.SBC_Expense_t) (positive add-back)",
+          "BS": "BS.APIC_t += abs(IS.SBC_Expense_t)"
+        }
+      },
+      "forfeitures": {
+        "us_gaap": "ASC 718: Policy election to (a) estimate forfeitures at grant or (b) account for forfeitures as they occur",
+        "ifrs": "IFRS 2: Must estimate forfeitures at grant date and update estimate each period"
+      }
+    },
+    {
+      "id": "RULE-EQUITY-SHARES-001",
+      "name": "Share Count Roll-Forward",
+      "description": "Track basic and diluted shares outstanding",
+      "basic_shares": {
+        "roll_forward": "BasicShares_t = BasicShares_{t-1} + NewIssuances_t + OptionExercises_t + RSU_Vesting_t - Repurchases_t",
+        "weighted_average": "Weight each change by the fraction of the period it was outstanding"
+      },
+      "diluted_shares": {
+        "description": "Pro-forma calculation including all potentially dilutive securities",
+        "methods": {
+          "treasury_stock_method": {
+            "id": "RULE-EQUITY-TSM-001",
+            "applies_to": ["Stock options", "Warrants", "RSUs (unvested)"],
+            "formula": "DilutiveShares_TSM = InTheMoneyOptions - (InTheMoneyOptions * ExercisePrice / AvgStockPrice)",
+            "expanded": "DilutiveShares = Options * (AvgStockPrice - ExercisePrice) / AvgStockPrice",
+            "conditions": [
+              "Only include in-the-money options (exercise price < average stock price)",
+              "Assumes exercise proceeds used to repurchase shares at average market price",
+              "Only dilutive effect included (anti-dilutive excluded)"
+            ],
+            "rsu_treatment": "Unvested RSUs treated as outstanding shares. Proceeds = unrecognized compensation cost + excess tax benefits."
+          },
+          "if_converted_method": {
+            "id": "RULE-EQUITY-IFC-001",
+            "applies_to": ["Convertible debt", "Convertible preferred stock"],
+            "formula": {
+              "numerator_adjustment": "Add back interest expense (net of tax) for convertible debt, or add back preferred dividends for convertible preferred",
+              "denominator_adjustment": "Add conversion shares",
+              "diluted_eps": "(NI + InterestAddBack_AfterTax) / (BasicShares + ConversionShares)"
+            },
+            "conditions": [
+              "Only included if effect is dilutive (reduces EPS)",
+              "Assumes conversion at beginning of period (or issuance date if later)",
+              "Each potentially dilutive security tested independently"
+            ]
+          }
+        },
+        "anti_dilution_test": "Each potentially dilutive security is tested independently. If including it increases EPS (anti-dilutive), exclude it from diluted EPS calculation."
+      }
+    },
+    {
+      "id": "RULE-EQUITY-EPS-001",
+      "name": "Earnings Per Share",
+      "basic_eps": {
+        "formula": "BasicEPS_t = (NI_t - PreferredDividends_t) / WeightedAvgBasicShares_t"
+      },
+      "diluted_eps": {
+        "formula": "DilutedEPS_t = AdjustedNumerator_t / WeightedAvgDilutedShares_t",
+        "numerator_adjustments": [
+          "Add back convertible preferred dividends (if dilutive)",
+          "Add back convertible debt interest, net of tax (if dilutive)"
+        ],
+        "denominator_adjustments": [
+          "Add dilutive shares from TSM (options, warrants, RSUs)",
+          "Add conversion shares from if-converted method (convertible debt, preferred)"
+        ],
+        "constraint": "DilutedEPS <= BasicEPS (diluted cannot exceed basic)"
+      }
+    },
+    {
+      "id": "RULE-EQUITY-REPURCHASE-001",
+      "name": "Share Repurchase Program",
+      "description": "Modeling share buybacks and their three-statement impact",
+      "methods": [
+        {
+          "name": "Dollar-amount driven",
+          "formula": "SharesRepurchased_t = BuybackBudget_t / AvgRepurchasePrice_t",
+          "use_when": "Company has announced a fixed dollar repurchase program"
+        },
+        {
+          "name": "Share-count driven",
+          "formula": "BuybackCost_t = TargetShareReduction_t * AvgRepurchasePrice_t",
+          "use_when": "Targeting a specific share count"
+        },
+        {
+          "name": "Excess cash driven",
+          "formula": "BuybackBudget_t = max(0, FreeCashFlow_t - Dividends_t - DebtRepay_t - MinCash_t)",
+          "use_when": "Buybacks are a residual use of excess cash"
+        }
+      ],
+      "three_statement_impact": {
+        "IS": "No direct impact (repurchases do not appear on IS). Reduces future EPS denominators.",
+        "CFS_CFF": "Cash outflow (negative) in financing activities",
+        "BS": "Increases treasury stock (contra-equity, more negative). Reduces total equity."
+      }
+    }
+  ],
+
+  "sign_convention_rules": {
+    "description": "Strict sign conventions must be normalized at data ingestion to prevent systemic double-counting and working capital reversals",
+    "income_statement": {
+      "id": "RULE-SIGN-IS-001",
+      "convention": "Revenues and gains positive; expenses and losses negative",
+      "examples": {
+        "revenue": "+100",
+        "cogs": "-60",
+        "sga": "-20",
+        "da": "-5",
+        "interest_expense": "-3",
+        "tax_expense": "-3",
+        "net_income": "+9"
+      },
+      "alternative_convention": "Some models show expenses as positive absolute values with explicit subtraction. The canonical convention treats all values as signed for consistent aggregation.",
+      "normalization_rule": "At ingestion, convert all IS items to signed convention. If source data shows COGS as positive $60M, convert to -$60M."
+    },
+    "balance_sheet": {
+      "id": "RULE-SIGN-BS-001",
+      "convention": "Assets positive; Liabilities positive; Equity positive; Contra accounts negative",
+      "examples": {
+        "cash": "+50",
+        "accounts_receivable": "+30",
+        "gross_ppe": "+200",
+        "accumulated_depreciation": "-80 (contra-asset)",
+        "net_ppe": "+120",
+        "accounts_payable": "+25",
+        "long_term_debt": "+100",
+        "common_stock_apic": "+50",
+        "retained_earnings": "+45",
+        "treasury_stock": "-20 (contra-equity)",
+        "total_equity": "+75"
+      },
+      "normalization_rule": "Contra accounts (Accumulated Depreciation, Treasury Stock, Valuation Allowance) carry negative signs to allow direct summation."
+    },
+    "cash_flow_statement": {
+      "id": "RULE-SIGN-CFS-001",
+      "convention": "Cash inflows positive; Cash outflows negative",
+      "examples": {
+        "net_income_cfo_start": "+9",
+        "da_addback": "+5",
+        "increase_in_ar": "-10 (use of cash)",
+        "increase_in_ap": "+5 (source of cash)",
+        "capex": "-15",
+        "asset_sale_proceeds": "+3",
+        "debt_issuance": "+50",
+        "debt_repayment": "-10",
+        "share_repurchase": "-20",
+        "dividends_paid": "-5"
+      },
+      "normalization_rule": "Outflows are always negative regardless of how displayed in source financials."
+    },
+    "common_sign_errors": [
+      {
+        "error": "Working capital sign reversal",
+        "description": "Treating increase in AR as positive on CFS instead of negative",
+        "impact": "CFO overstated by 2x the WC change, cash balance wrong",
+        "fix": "Apply formula: CFS.ChangeInAsset = -(BS.Asset_t - BS.Asset_{t-1})"
+      },
+      {
+        "error": "Double-negative on contra accounts",
+        "description": "Treating accumulated depreciation as positive then subtracting it",
+        "impact": "Net PP&E calculated incorrectly",
+        "fix": "Store AccumDepr as negative; NetPPE = GrossPPE + AccumDepr (addition with negative value = subtraction)"
+      },
+      {
+        "error": "CapEx sign on CFS vs PP&E schedule",
+        "description": "CapEx negative on CFS (outflow) but must be positive addition to Gross PP&E",
+        "impact": "PP&E decreasing when it should increase",
+        "fix": "Use abs(CFS.CapEx) when rolling forward Gross PP&E"
+      },
+      {
+        "error": "D&A add-back sign",
+        "description": "D&A is negative on IS but must be positive on CFS",
+        "impact": "CFO understated",
+        "fix": "CFS.DA_addback = abs(IS.DA)"
+      },
+      {
+        "error": "Gain/loss on asset sale",
+        "description": "Gain is positive on IS, must be negative adjustment in CFO (reverse it), and full proceeds are positive in CFI",
+        "impact": "Double-counting of proceeds",
+        "fix": "CFO: subtract gain (or add back loss). CFI: record full cash proceeds."
+      }
+    ]
+  },
+
+  "circularity_handling": [
+    {
+      "id": "CIRC-INT-CASH-REV-001",
+      "name": "Interest-Cash-Revolver Loop",
+      "type": "primary",
+      "dependency_loop": [
+        "Average debt balance drives interest expense",
+        "Interest expense drives EBT",
+        "EBT drives tax expense",
+        "Tax expense drives net income",
+        "Net income drives CFO",
+        "CFO drives pre-plug cash balance",
+        "Pre-plug cash determines revolver draw/sweep",
+        "Revolver draw/sweep changes average debt balance"
+      ],
+      "resolution": {
+        "method": "fixed_point_iteration",
+        "algorithm": "Damped Gauss-Seidel iteration",
+        "parameters": {
+          "max_iterations": 100,
+          "convergence_tolerance": 1e-6,
+          "damping_factor": 0.7,
+          "convergence_variable": "revolver_balance",
+          "formula": "x_{n+1} = alpha * f(x_n) + (1 - alpha) * x_n"
+        },
+        "steps": [
+          "Step 1: Initialize revolver balance to zero (or prior period balance)",
+          "Step 2: Calculate interest expense based on current debt balances",
+          "Step 3: Calculate NI, CFO, and pre-plug cash",
+          "Step 4: Determine revolver draw/sweep based on pre-plug cash vs min cash",
+          "Step 5: Apply damping: new_balance = 0.7 * calculated_balance + 0.3 * previous_iteration_balance",
+          "Step 6: Check convergence: |new_balance - old_balance| < tolerance",
+          "Step 7: If not converged, repeat from Step 2"
+        ]
+      },
+      "breaker_mode": {
+        "description": "Use beginning-of-period balances for interest calculation, breaking the circularity",
+        "formula": "IS.InterestExp_t = BS.DebtBegin_t * Rate (instead of average balance)",
+        "when_to_use": [
+          "Static models where precision < stability",
+          "Sensitivity tables where iteration would be too slow",
+          "Quick sanity checks",
+          "Models where revolver draws are immaterial"
+        ],
+        "tradeoff": "Less precise but eliminates iteration entirely"
+      }
+    },
+    {
+      "id": "CIRC-TAX-INT-NOL-001",
+      "name": "Tax-Interest-NOL Loop",
+      "type": "secondary",
+      "dependency_loop": [
+        "Interest expense affects EBT",
+        "EBT determines taxable income",
+        "Taxable income determines NOL utilization",
+        "NOL utilization affects current tax expense",
+        "Tax expense affects net income",
+        "Net income affects CFO",
+        "CFO affects cash available",
+        "Cash available affects revolver draw",
+        "Revolver draw affects average debt",
+        "Average debt affects interest expense"
+      ],
+      "resolution": {
+        "method": "solved_within_primary_scc",
+        "description": "This loop is part of the Interest-Cash-Revolver SCC and is solved implicitly within the same fixed-point iteration",
+        "note": "The NOL utilization adds complexity but does not create a separate SCC — it is nested within the primary loop"
+      }
+    },
+    {
+      "id": "CIRC-SBC-EPS-001",
+      "name": "SBC-EPS Target Loop",
+      "type": "tertiary",
+      "dependency_loop": [
+        "EPS target drives performance-based SBC vesting probability",
+        "SBC expense affects net income",
+        "Net income affects EPS",
+        "EPS determines if performance targets are met",
+        "Performance achievement affects SBC vesting and future expense"
+      ],
+      "resolution": {
+        "method": "secondary_fixed_point",
+        "description": "Separate iteration loop after the primary Interest-Revolver loop has converged",
+        "parameters": {
+          "max_iterations": 50,
+          "convergence_tolerance": 1e-4,
+          "convergence_variable": "sbc_expense"
+        }
+      },
+      "when_relevant": "Only for models with material performance-based equity awards where EPS is a vesting metric"
+    }
+  ],
+
+  "model_sequencing": {
+    "id": "SEQ-MASTER-001",
+    "evaluation_method": "column_wise",
+    "description": "Solve period-by-period (left to right). Within each period, follow topological sort order.",
+    "canonical_build_order": [
+      {
+        "phase": 1,
+        "name": "Income Statement — Operating Lines",
+        "id": "SEQ-IS-OPER-001",
+        "items": ["Revenue", "COGS", "GrossProfit", "SGA", "RD", "OtherOpEx"],
+        "output": "EBIT (before D&A if shown separately, else after)",
+        "dependencies": "Revenue assumptions, cost structure assumptions"
+      },
+      {
+        "phase": 2,
+        "name": "Supporting Schedules",
+        "id": "SEQ-SCHEDULES-001",
+        "sub_phases": [
+          {
+            "phase": "2a",
+            "name": "Working Capital Schedule",
+            "items": ["AR (from DSO)", "Inventory (from DIO)", "AP (from DPO)", "Prepaid", "Accrued Liab", "Deferred Rev"],
+            "depends_on": "Revenue, COGS from Phase 1",
+            "outputs_to": "CFS (WC deltas), BS (ending balances)"
+          },
+          {
+            "phase": "2b",
+            "name": "PP&E and Intangibles Schedule",
+            "items": ["CapEx", "Depreciation", "Amortization", "Disposals", "Impairments"],
+            "depends_on": "Revenue (for CapEx forecasts)",
+            "outputs_to": "IS (D&A expense), CFS (CapEx, D&A add-back), BS (Net PP&E, Net Intangibles)"
+          },
+          {
+            "phase": "2c",
+            "name": "Debt Schedule",
+            "items": ["Per-tranche roll-forwards", "Interest calculations", "PIK", "Amortization schedules"],
+            "depends_on": "Prior period balances, new issuance assumptions",
+            "outputs_to": "IS (Interest expense), CFS (debt issuances/repayments, interest paid), BS (debt balances)",
+            "creates_circularity": true,
+            "note": "Interest expense depends on average balance which depends on revolver which depends on cash which depends on NI which depends on interest"
+          },
+          {
+            "phase": "2d",
+            "name": "Tax Schedule",
+            "items": ["Current tax", "Deferred tax", "NOL utilization", "DTA/DTL balances", "Valuation allowance"],
+            "depends_on": "EBT from IS (after interest expense)",
+            "outputs_to": "IS (tax expense), CFS (deferred tax add-back), BS (DTA, DTL, taxes payable)"
+          },
+          {
+            "phase": "2e",
+            "name": "Equity / SBC Schedule",
+            "items": ["SBC expense", "Share count", "Option exercises", "Buybacks"],
+            "depends_on": "Stock price assumptions, vesting schedules",
+            "outputs_to": "IS (SBC expense), CFS (SBC add-back, buyback outflows), BS (APIC, Treasury Stock, Share Count)"
+          }
+        ]
+      },
+      {
+        "phase": 3,
+        "name": "Income Statement — Below EBIT",
+        "id": "SEQ-IS-BELOW-001",
+        "items": ["Interest Expense (from Debt Schedule)", "Interest Income", "EBT", "Tax Expense (from Tax Schedule)", "Net Income"],
+        "depends_on": "Phase 1 (EBIT), Phase 2c (Interest), Phase 2d (Taxes)"
+      },
+      {
+        "phase": 4,
+        "name": "Cash Flow Statement",
+        "id": "SEQ-CFS-001",
+        "items": ["CFO (NI + non-cash adjustments + WC changes)", "CFI (CapEx + other investing)", "CFF (debt + equity + dividends)"],
+        "depends_on": "Phase 3 (NI), Phase 2a (WC), Phase 2b (D&A, CapEx), Phase 2c (Debt flows), Phase 2e (Buybacks)"
+      },
+      {
+        "phase": 5,
+        "name": "Balance Sheet",
+        "id": "SEQ-BS-001",
+        "items": ["All BS line items pulled from respective schedules", "Cash solved LAST"],
+        "depends_on": "Phase 2 (all schedules), Phase 4 (CFS ending cash)",
+        "cash_solved_last": true,
+        "process": [
+          "Pull current assets (ex-cash) from WC schedule",
+          "Pull non-current assets from PP&E/intangibles/goodwill schedules",
+          "Pull liabilities from debt schedule and WC schedule",
+          "Pull equity from equity schedule and RE bridge",
+          "Set Cash = CFS.EndingCash (LAST step)"
+        ]
+      },
+      {
+        "phase": 6,
+        "name": "Diagnostic Checks",
+        "id": "SEQ-DIAG-001",
+        "items": ["All DIAG tests run after BS is complete"],
+        "depends_on": "Phase 5 (complete BS)"
+      }
+    ],
+    "iteration_phase": {
+      "description": "If the model has circular references (Interest-Revolver), Phases 2c through 5 are wrapped in a fixed-point iteration loop",
+      "scc_members": ["Debt Schedule interest", "IS below EBIT", "CFS", "BS cash", "Revolver plug"],
+      "exit_condition": "All convergence variables within tolerance"
+    }
+  },
+
+  "diagnostics": [
+    {
+      "id": "DIAG-BS-001",
+      "name": "Balance Sheet Balance Check",
+      "check_formula": "abs(TotalAssets_t - (TotalLiabilities_t + TotalEquity_t)) <= tolerance",
+      "tolerance": 1e-6,
+      "severity": "CRITICAL",
+      "run_frequency": "every_period",
+      "typical_root_cause": "Broken link or sign error in cross-statement flow",
+      "localization_steps": [
+        "Check cash tie-out (DIAG-CFS-001)",
+        "Check retained earnings continuity (DIAG-RE-001)",
+        "Check working capital deltas (DIAG-WC-001)",
+        "Audit PP&E and debt roll-forwards",
+        "Verify all schedule ending balances tied to BS"
+      ],
+      "fix": "Re-link cash and retained earnings. Audit supporting schedules."
+    },
+    {
+      "id": "DIAG-CFS-001",
+      "name": "Cash Tie-Out",
+      "check_formula": "abs(CFS.EndingCash_t - BS.Cash_t) <= tolerance",
+      "tolerance": 1e-6,
+      "severity": "CRITICAL",
+      "run_frequency": "every_period",
+      "typical_root_cause": "BS cash is independently calculated instead of referencing CFS ending cash",
+      "fix": "Set BS.Cash = CFS.EndingCash as a direct reference"
+    },
+    {
+      "id": "DIAG-RE-001",
+      "name": "Retained Earnings Continuity",
+      "check_formula": "abs(BS.RE_t - (BS.RE_{t-1} + IS.NI_t - Dividends_t)) <= tolerance",
+      "tolerance": 1e-6,
+      "severity": "CRITICAL",
+      "run_frequency": "every_period",
+      "typical_root_cause": "Missing NI link or omitted dividends in RE bridge",
+      "fix": "Re-link IS.NetIncome to RE bridge. Verify dividends from CFF."
+    },
+    {
+      "id": "DIAG-WC-001",
+      "name": "Working Capital Delta Matching",
+      "check_formula": "abs(CFS.WC_Changes_t - (NWC_{t-1} - NWC_t)) <= tolerance",
+      "tolerance": 1e-6,
+      "severity": "CRITICAL",
+      "run_frequency": "every_period",
+      "typical_root_cause": "Working capital sign reversal or omitted line item",
+      "fix": "Normalize signs. Ensure each WC line uses the delta formula consistently."
+    },
+    {
+      "id": "DIAG-DA-001",
+      "name": "D&A Consistency",
+      "check_formula": "abs(IS.DA_t - CFS.CFO.DA_AddBack_t) <= tolerance",
+      "tolerance": 1e-6,
+      "severity": "HIGH",
+      "run_frequency": "every_period",
+      "typical_root_cause": "Multiple D&A sources (IS has different value than CFS add-back)",
+      "fix": "Use single D&A schedule feeding both IS and CFS"
+    },
+    {
+      "id": "DIAG-DEBT-001",
+      "name": "Debt Roll-Forward Integrity",
+      "check_formula": "abs(DebtClose_t - (DebtOpen_t + Issuances_t - Repayments_t + PIK_t)) <= tolerance",
+      "tolerance": 1e-6,
+      "severity": "HIGH",
+      "run_frequency": "every_period",
+      "per_tranche": true,
+      "typical_root_cause": "Missing PIK accrual or CFF flow not tied to schedule",
+      "fix": "Ensure tranche schedule ties to CFF for cash flows and BS for ending balances"
+    },
+    {
+      "id": "DIAG-PPE-001",
+      "name": "PP&E Roll-Forward Integrity",
+      "check_formula": "abs(NetPPE_t - (NetPPE_{t-1} + CapEx_t - DA_t - NBV_Disposals_t - Impairment_t)) <= tolerance",
+      "tolerance": 1e-6,
+      "severity": "HIGH",
+      "run_frequency": "every_period",
+      "typical_root_cause": "Disposal NBV not removed from both gross and accumulated depreciation",
+      "fix": "Verify disposal accounting removes both gross cost and accumulated depreciation"
+    },
+    {
+      "id": "DIAG-EQUITY-001",
+      "name": "Total Equity Reconciliation",
+      "check_formula": "abs(TotalEquity_t - (CommonStock_t + APIC_t + RE_t + AOCI_t + TreasuryStock_t + NCI_t)) <= tolerance",
+      "tolerance": 1e-6,
+      "severity": "HIGH",
+      "run_frequency": "every_period",
+      "typical_root_cause": "Missing equity component or SBC not flowing to APIC",
+      "fix": "Verify all equity components are included and roll-forwards are correct"
+    },
+    {
+      "id": "DIAG-CONVERGENCE-001",
+      "name": "Circularity Convergence Check",
+      "check_formula": "iterations_used <= max_iterations AND abs(delta_last_iteration) <= convergence_tolerance",
+      "severity": "CRITICAL",
+      "run_frequency": "every_period",
+      "typical_root_cause": "Model is diverging — check for explosive feedback loops or incorrect formulas",
+      "fix": "Check damping factor, review formula logic, consider breaker mode"
+    },
+    {
+      "id": "DIAG-LIQUIDITY-001",
+      "name": "Negative Cash / Liquidity Check",
+      "check_formula": "BS.Cash_t >= 0",
+      "severity": "WARNING",
+      "run_frequency": "every_period",
+      "typical_root_cause": "Insufficient financing assumptions; revolver fully drawn and cash still negative",
+      "fix": "Review financing assumptions. Consider additional debt/equity issuance or reduced spending."
+    },
+    {
+      "id": "DIAG-COVENANT-001",
+      "name": "Financial Covenant Compliance",
+      "checks": [
+        "TotalDebt / LTM_EBITDA <= MaxLeverage",
+        "LTM_EBITDA / LTM_InterestExp >= MinCoverage",
+        "Cash + RevolverAvailability >= MinLiquidity"
+      ],
+      "severity": "WARNING",
+      "run_frequency": "every_period",
+      "typical_root_cause": "Operating performance deterioration or excessive leverage",
+      "fix": "Flag for user review; may require revised operating assumptions or additional equity"
+    }
+  ],
+
+  "edge_cases_and_exceptions": {
+    "negative_equity": {
+      "description": "Accumulated deficit exceeds APIC and common stock, resulting in negative total equity",
+      "modeling_rule": "Allowed. Do not net accumulated deficits against APIC. Report each component separately.",
+      "bs_impact": "TotalEquity can be negative. A = L + E still holds (E is negative, so L > A).",
+      "real_world": "Common in early-stage companies, highly leveraged companies, and companies with large share repurchase programs"
+    },
+    "acquisitions_ppa": {
+      "description": "Purchase Price Allocation in business combinations",
+      "standard": "ASC 805 / IFRS 3",
+      "steps": [
+        "Step 1: Determine total consideration (cash + stock + contingent consideration)",
+        "Step 2: Identify and measure fair value of all identifiable assets and liabilities",
+        "Step 3: Step up/down assets to fair value (creates new tax basis differences → DTAs/DTLs)",
+        "Step 4: Calculate goodwill = Consideration - Fair Value of Net Identifiable Assets",
+        "Step 5: Establish new intangible assets (customer relationships, technology, trade names)",
+        "Step 6: Record new DTAs/DTLs from fair value step-ups/step-downs"
+      ],
+      "three_statement_impact": {
+        "BS": "New assets at fair value, new intangibles, goodwill, acquisition DTAs/DTLs",
+        "IS": "New amortization expense from acquired intangibles; transaction costs expensed immediately (ASC 805)",
+        "CFS_CFI": "Cash consideration as investing outflow, net of cash acquired"
+      }
+    },
+    "discontinued_operations": {
+      "description": "Business components that have been sold, abandoned, or classified as held for sale",
+      "standard": "ASC 205-20 / IFRS 5",
+      "modeling_rules": [
+        "Segregate discontinued operations from continuing operations on IS",
+        "Report as single line below income from continuing operations",
+        "Restate prior periods to reclassify discontinued ops",
+        "On BS, classify assets/liabilities as held for sale (current)",
+        "Gain/loss on disposal reported in discontinued operations"
+      ]
+    },
+    "foreign_currency_translation": {
+      "description": "Translation of foreign subsidiary financial statements into reporting currency",
+      "standards": ["ASC 830", "IAS 21"],
+      "rules": {
+        "income_statement": "Translate at average exchange rate for the period",
+        "balance_sheet": "Translate at period-end (closing) exchange rate",
+        "equity": "Translate at historical rates (rates when equity transactions occurred)",
+        "imbalance": "The difference goes to Cumulative Translation Adjustment (CTA) in AOCI (equity)"
+      },
+      "cta_formula": "CTA_t = Assets_at_closing_rate - (Liabilities_at_closing_rate + Equity_at_historical_rates + NI_at_avg_rate)",
+      "cash_flow_impact": "Separate line on CFS: 'Effect of exchange rate changes on cash'"
+    },
+    "hyperinflationary_economies": {
+      "standard": "IAS 29",
+      "description": "Financial statements of entities with functional currency of a hyperinflationary economy must be restated",
+      "threshold": "Cumulative inflation > 100% over 3 years",
+      "ifrs_treatment": "Restate non-monetary items to current purchasing power using general price index",
+      "us_gaap_treatment": "Use reporting currency (USD) as functional currency (remeasurement)"
+    },
+    "non_controlling_interests": {
+      "description": "Minority shareholders' interest in consolidated subsidiaries",
+      "standard": "ASC 810 / IFRS 10",
+      "bs_presentation": "Separate component within equity",
+      "is_presentation": "Net income allocated between parent and NCI. NCI share shown below consolidated NI.",
+      "roll_forward": "NCI_t = NCI_{t-1} + NCI_ShareOfNI_t + NCI_OCI_t - NCI_Dividends_t"
+    },
+    "equity_method_investments": {
+      "description": "Investments where company has significant influence (typically 20-50% ownership)",
+      "standard": "ASC 323 / IAS 28",
+      "bs_treatment": "Single line asset: Investment_t = Investment_{t-1} + ShareOfNI_t - Dividends_t +/- OCI_t",
+      "is_treatment": "Single line: Equity in earnings of investee (below operating income)",
+      "cfs_treatment": "Share of NI is non-cash in CFO (added back or subtracted). Dividends received in CFO or CFI."
+    },
+    "lease_accounting": {
+      "standard_us": "ASC 842",
+      "standard_ifrs": "IFRS 16",
+      "key_difference": {
+        "us_gaap": "Dual model: Operating leases (straight-line expense) and Finance leases (front-loaded expense like debt)",
+        "ifrs": "Single model: All leases treated like finance leases (except short-term and low-value exemptions)"
+      },
+      "operating_lease_us_gaap": {
+        "BS": "ROU Asset and Lease Liability (both sides of BS)",
+        "IS": "Single straight-line lease expense in operating expenses",
+        "CFS": "All cash payments in CFO"
+      },
+      "finance_lease": {
+        "BS": "ROU Asset (amortized) and Lease Liability (reduced by payments)",
+        "IS": "Amortization of ROU asset (operating) + Interest on lease liability (below EBIT)",
+        "CFS": "Interest portion in CFO, Principal portion in CFF"
+      }
+    },
+    "restructuring_charges": {
+      "description": "One-time costs for workforce reductions, facility closures, contract terminations",
+      "standard": "ASC 420 / IAS 37",
+      "modeling_rules": [
+        "Record as separate operating expense line on IS",
+        "Non-cash portion (asset impairments) added back in CFO",
+        "Cash portion (severance, termination fees) reflected in CFO as cash used",
+        "Accrued restructuring liability on BS (current/non-current)"
+      ]
+    }
+  },
+
+  "gaap_vs_ifrs_crosswalk": {
+    "description": "Policy flags to handle standard differences without rewriting calculations",
+    "policy_flags": [
+      {
+        "id": "FLAG-GAAP-IFRS-CFS-001",
+        "topic": "Cash Flow Classification",
+        "us_gaap": {
+          "standard": "ASC 230",
+          "rules": {
+            "interest_paid": "CFO (required)",
+            "interest_received": "CFO (required)",
+            "dividends_paid": "CFF (required)",
+            "dividends_received": "CFO (required)",
+            "income_taxes_paid": "CFO (required)"
+          }
+        },
+        "ifrs": {
+          "standard": "IAS 7",
+          "rules": {
+            "interest_paid": "CFO or CFF (policy choice)",
+            "interest_received": "CFO or CFI (policy choice)",
+            "dividends_paid": "CFO or CFF (policy choice)",
+            "dividends_received": "CFO or CFI (policy choice)",
+            "income_taxes_paid": "CFO (required, unless specifically identified with CFI or CFF)"
+          }
+        },
+        "modeling_switch": "policy_flag: 'cfs_classification_standard' = 'US_GAAP' | 'IFRS'",
+        "routing_logic": "Route interest/dividend cash flows to appropriate CFS section based on flag"
+      },
+      {
+        "id": "FLAG-GAAP-IFRS-LEASE-001",
+        "topic": "Lessee Lease Accounting",
+        "us_gaap": {
+          "standard": "ASC 842",
+          "model": "Dual model: Operating leases and Finance leases",
+          "operating_lease": {
+            "is": "Single straight-line lease expense",
+            "cfs": "All payments in CFO"
+          },
+          "finance_lease": {
+            "is": "Amortization (operating) + Interest (below EBIT)",
+            "cfs": "Interest in CFO, Principal in CFF"
+          }
+        },
+        "ifrs": {
+          "standard": "IFRS 16",
+          "model": "Single model: All leases treated as finance leases",
+          "exceptions": "Short-term leases (<12 months) and low-value assets may be expensed straight-line",
+          "all_leases": {
+            "is": "Depreciation of ROU asset + Interest on lease liability",
+            "cfs": "Interest in CFO, Principal in CFF"
+          }
+        },
+        "modeling_switch": "policy_flag: 'lease_standard' = 'ASC_842' | 'IFRS_16'",
+        "impact": "IFRS models show higher EBITDA (lease expense reclassified to depreciation + interest) and higher CFO (principal payments in CFF)"
+      },
+      {
+        "id": "FLAG-GAAP-IFRS-RD-001",
+        "topic": "Research and Development",
+        "us_gaap": {
+          "standard": "ASC 730",
+          "rule": "Expense all R&D as incurred",
+          "exception": "Software development costs capitalized after technological feasibility (ASC 985-20) or for internal use (ASC 350-40)"
+        },
+        "ifrs": {
+          "standard": "IAS 38",
+          "rule": "Research phase: Expense. Development phase: Capitalize if all six criteria are met.",
+          "six_criteria": [
+            "Technical feasibility of completing the asset",
+            "Intention to complete and use/sell",
+            "Ability to use or sell",
+            "How the asset will generate probable future economic benefits",
+            "Availability of resources to complete",
+            "Ability to measure expenditure reliably"
+          ]
+        },
+        "modeling_switch": "policy_flag: 'rd_accounting' = 'EXPENSE_ALL' | 'CAPITALIZE_DEVELOPMENT'",
+        "impact": "Capitalization creates intangible asset on BS, reduces IS expense in current period, adds amortization in future periods"
+      },
+      {
+        "id": "FLAG-GAAP-IFRS-IMPAIRMENT-001",
+        "topic": "Impairment of Long-Lived Assets",
+        "us_gaap": {
+          "standards": ["ASC 350 (Goodwill/Intangibles)", "ASC 360 (PP&E)"],
+          "reversal": "NOT permitted (goodwill or long-lived assets)",
+          "exception": "Assets held for sale can be written back up to carrying amount before held-for-sale classification"
+        },
+        "ifrs": {
+          "standard": "IAS 36",
+          "reversal": "Permitted for PP&E and finite-lived intangibles (up to original carrying amount less normal depreciation). NOT permitted for goodwill.",
+          "reversal_limit": "Cannot exceed what carrying amount would have been without impairment (after normal depreciation)"
+        },
+        "modeling_switch": "policy_flag: 'impairment_reversal' = 'NOT_ALLOWED' | 'ALLOWED_NON_GOODWILL'",
+        "impact": "IFRS models may show income from reversal of previous impairment charges"
+      },
+      {
+        "id": "FLAG-GAAP-IFRS-SBC-001",
+        "topic": "Share-Based Payment Forfeitures",
+        "us_gaap": {
+          "standard": "ASC 718",
+          "rule": "Policy election: (a) Estimate forfeitures at grant date and revise, OR (b) Account for forfeitures as they occur (ASU 2016-09)"
+        },
+        "ifrs": {
+          "standard": "IFRS 2",
+          "rule": "Must estimate forfeitures at grant date and revise estimate each reporting period"
+        },
+        "modeling_switch": "policy_flag: 'sbc_forfeiture_method' = 'ESTIMATE_AT_GRANT' | 'AS_OCCUR'",
+        "impact": "Minimal difference in most cases. 'As occur' is simpler to model."
+      },
+      {
+        "id": "FLAG-GAAP-IFRS-INVENTORY-001",
+        "topic": "Inventory Costing Methods",
+        "us_gaap": {
+          "standard": "ASC 330",
+          "allowed_methods": ["FIFO", "LIFO", "Weighted Average"],
+          "lower_of_cost_or_market": "LCM test (cost, market = replacement cost bounded by NRV and NRV-normal profit)"
+        },
+        "ifrs": {
+          "standard": "IAS 2",
+          "allowed_methods": ["FIFO", "Weighted Average"],
+          "lifo_prohibited": true,
+          "lower_of_cost_or_nrv": "Cost vs NRV (estimated selling price - estimated costs to complete and sell)"
+        },
+        "modeling_switch": "policy_flag: 'inventory_method' = 'FIFO' | 'LIFO' | 'WEIGHTED_AVG'",
+        "impact": "LIFO typically results in higher COGS and lower inventory in inflationary environments"
+      },
+      {
+        "id": "FLAG-GAAP-IFRS-EXTRAORDINARY-001",
+        "topic": "Extraordinary Items",
+        "us_gaap": {
+          "rule": "Eliminated by ASU 2015-01. No extraordinary items classification."
+        },
+        "ifrs": {
+          "standard": "IAS 1",
+          "rule": "Prohibited. No separate classification for extraordinary items."
+        },
+        "modeling_switch": "Not needed — neither standard allows extraordinary items"
+      }
+    ]
+  },
+
+  "implementation_guide": {
+    "templates": {
+      "description": "Five core JSON templates operationalize the specification",
+      "rule_template": {
+        "id": "RULE-{NS}-{STMT}-{TOPIC}-{SEQ}",
+        "name": "",
+        "statement": "",
+        "line_item": "",
+        "formula": "",
+        "inputs": [],
+        "output": "",
+        "unit": "",
+        "sign_convention": "",
+        "dependencies": [],
+        "notes": ""
+      },
+      "link_template": {
+        "id": "LINK-{SRC_STMT}-{TGT_STMT}-{SEQ}",
+        "name": "",
+        "source": {"statement": "", "line_item": ""},
+        "target": {"statement": "", "line_item": ""},
+        "relationship_type": "",
+        "formula": "",
+        "criticality": ""
+      },
+      "constraint_template": {
+        "id": "CONSTRAINT-{NS}-{STMT}-{TOPIC}-{SEQ}",
+        "name": "",
+        "predicate": "",
+        "tolerance": 1e-6,
+        "severity": "CRITICAL",
+        "on_violation": "HALT"
+      },
+      "seq_template": {
+        "id": "SEQ-{NS}-{STMT}-{SEQ}",
+        "name": "",
+        "phase": 0,
+        "depends_on": [],
+        "rules_to_evaluate": [],
+        "iteration_policy": {
+          "is_scc": false,
+          "max_iterations": 100,
+          "convergence_tolerance": 1e-6,
+          "damping_factor": 0.7
+        }
+      },
+      "diag_template": {
+        "id": "DIAG-{STMT}-{SEQ}",
+        "name": "",
+        "check_formula": "",
+        "tolerance": 1e-6,
+        "severity": "CRITICAL",
+        "typical_root_cause": "",
+        "fix": "",
+        "run_frequency": "every_period"
+      }
+    },
+    "validation_summary": {
+      "step_1": "Populate RULEs for every line item calculation across IS, CFS, BS, and supporting schedules",
+      "step_2": "Wire LINKs for every cross-statement data flow (minimum 9 high-reliability links)",
+      "step_3": "Enforce CONSTRAINTs for all foundational accounting identities",
+      "step_4": "Execute the SEQ manifest in the canonical build order (IS → Schedules → CFS → BS)",
+      "step_5": "Assert DIAGs after every period to confirm structural integrity",
+      "step_6": "Iterate SCC phases to convergence for circular references"
+    },
+    "action_plan": [
+      {
+        "step": 1,
+        "action": "Stand up artifact registry",
+        "details": "Implement the naming convention and JSON schemas for RULE, LINK, CONSTRAINT, SEQ, and DIAG artifacts"
+      },
+      {
+        "step": 2,
+        "action": "Normalize signs",
+        "details": "Enforce the canonical positive/negative convention at data ingestion. All IS expenses negative, all CFS outflows negative, contra accounts negative."
+      },
+      {
+        "step": 3,
+        "action": "Implement the DAG engine",
+        "details": "Build the SEQ engine following IS → Schedules → CFS → BS order. Identify SCCs (Interest-Tax-Revolver) and isolate for fixed-point iterative solving."
+      },
+      {
+        "step": 4,
+        "action": "Build supporting schedules",
+        "details": "Centralize D&A, SBC, and tranche-level debt/PP&E waterfalls as single sources of truth feeding both IS and CFS."
+      },
+      {
+        "step": 5,
+        "action": "Enable policy flags",
+        "details": "Wire GAAP/IFRS toggles for leases, R&D capitalization, cash flow classifications, impairment reversal, and SBC forfeiture method."
+      },
+      {
+        "step": 6,
+        "action": "Wire diagnostics",
+        "details": "Implement the core DIAG tests (BS balance, cash tie-out, RE continuity, WC matching, D&A consistency, debt roll-forward). Configure engine to fail-fast on any CRITICAL constraint breach."
+      }
+    ]
+  },
+
+  "references": [
+    {
+      "id": 1,
+      "title": "JSON Schema Validation: A Vocabulary for Structural Validation of JSON",
+      "url": "https://json-schema.org/draft/2020-12/json-schema-validation",
+      "relevance": "Schema validation for RULE/LINK/CONSTRAINT/SEQ/DIAG artifacts"
+    },
+    {
+      "id": 2,
+      "title": "JSON Schema: The Blueprint for Financial Data | Lightspark",
+      "url": "https://www.lightspark.com/glossary/json-schema",
+      "relevance": "Financial data schema design patterns"
+    },
+    {
+      "id": 3,
+      "title": "Excel Recalculation | Microsoft Learn",
+      "url": "https://learn.microsoft.com/en-us/office/client-developer/excel/excel-recalculation",
+      "relevance": "Dependency tracking and recalculation order in spreadsheet engines"
+    },
+    {
+      "id": 4,
+      "title": "3-Statement Model | Complete Guide - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/build-integrated-3-statement-financial-model/",
+      "relevance": "Core three-statement model construction methodology"
+    },
+    {
+      "id": 5,
+      "title": "3-Statement Model - Financial Edge",
+      "url": "https://www.fe.training/free-resources/financial-modeling/3-statement-model/",
+      "relevance": "Three-statement model training resource"
+    },
+    {
+      "id": 6,
+      "title": "Understanding the Accounting Equation - Investopedia",
+      "url": "https://www.investopedia.com/terms/a/accounting-equation.asp",
+      "relevance": "Foundational accounting equation (A = L + E)"
+    },
+    {
+      "id": 7,
+      "title": "Financial Modeling Guide - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/financial-modeling/",
+      "relevance": "General financial modeling best practices and sign conventions"
+    },
+    {
+      "id": 8,
+      "title": "Accounting Equation: In-Depth Explanation - AccountingCoach",
+      "url": "https://www.accountingcoach.com/accounting-equation/explanation",
+      "relevance": "Detailed accounting equation mechanics"
+    },
+    {
+      "id": 9,
+      "title": "Retained Earnings | Formula + Calculator - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/retained-earnings/",
+      "relevance": "Retained earnings roll-forward mechanics"
+    },
+    {
+      "id": 10,
+      "title": "Retained Earnings and Income Statement - Investopedia",
+      "url": "https://www.investopedia.com/ask/answers/030215/how-are-retained-earnings-related-companys-income-statement.asp",
+      "relevance": "IS to BS retained earnings linkage"
+    },
+    {
+      "id": 11,
+      "title": "Cash Flow Statements - Investopedia",
+      "url": "https://www.investopedia.com/investing/what-is-a-cash-flow-statement/",
+      "relevance": "CFS structure and methodology"
+    },
+    {
+      "id": 12,
+      "title": "Cash Flow From Operating Activities (CFO) - Investopedia",
+      "url": "https://www.investopedia.com/terms/c/cash-flow-from-operating-activities.asp",
+      "relevance": "CFO indirect method construction"
+    },
+    {
+      "id": 13,
+      "title": "Capital Expenditure (CapEx) - Investopedia",
+      "url": "https://www.investopedia.com/terms/c/capitalexpenditure.asp",
+      "relevance": "CapEx definitions and treatment"
+    },
+    {
+      "id": 14,
+      "title": "Balance Sheet Projections - Macabacus",
+      "url": "https://macabacus.com/operating-model/balance-sheet-projections",
+      "relevance": "BS projection methodology and PP&E tracking"
+    },
+    {
+      "id": 15,
+      "title": "Debt Schedule | Formula + Calculator - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/debt-schedule/",
+      "relevance": "Debt schedule construction and roll-forwards"
+    },
+    {
+      "id": 16,
+      "title": "LBO Cash Sweep | Formula + Calculator - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/cash-sweep/",
+      "relevance": "Excess cash flow sweep mechanics"
+    },
+    {
+      "id": 17,
+      "title": "Depreciation Expense - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/depreciation/",
+      "relevance": "Depreciation methods and EBITDA bridge"
+    },
+    {
+      "id": 18,
+      "title": "Cash Flow Statement: In-Depth Explanation - AccountingCoach",
+      "url": "https://www.accountingcoach.com/cash-flow-statement/explanation",
+      "relevance": "Detailed CFS construction guide"
+    },
+    {
+      "id": 19,
+      "title": "Circular Reference Excel - Breaking Into Wall Street",
+      "url": "https://breakingintowallstreet.com/kb/excel/circular-reference-excel/",
+      "relevance": "Managing circular references in financial models"
+    },
+    {
+      "id": 20,
+      "title": "IAS 7 Statement of Cash Flows - IFRS Foundation",
+      "url": "https://www.ifrs.org/content/dam/ifrs/publications/pdf-standards/english/2022/issued/part-a/ias-7-statement-of-cash-flows.pdf",
+      "relevance": "IFRS cash flow statement requirements"
+    },
+    {
+      "id": 21,
+      "title": "Revolver Debt | Formula + Calculation - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/modeling-revolving-credit-line-excel-free-template/",
+      "relevance": "Revolver modeling mechanics"
+    },
+    {
+      "id": 22,
+      "title": "EBITDA Primer - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/ebitda/",
+      "relevance": "EBITDA calculation and D&A consistency"
+    },
+    {
+      "id": 23,
+      "title": "Broken Models & Circular References - A Simple Model",
+      "url": "https://www.asimplemodel.com/financial-curriculum/financial-modeling/integrating-statements/broken-models-circular-references",
+      "relevance": "Circularity identification and resolution"
+    },
+    {
+      "id": 24,
+      "title": "Interest Expense - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/interest-expense/",
+      "relevance": "Interest calculation on average debt balances"
+    },
+    {
+      "id": 25,
+      "title": "Modeling Working Capital: Drivers and Schedules",
+      "url": "https://investmentbankinganalysts.com/modeling-working-capital-drivers-and-schedules-in-three-statement-models/",
+      "relevance": "Working capital driver-based forecasting"
+    },
+    {
+      "id": 26,
+      "title": "Prepaid Expenses Accounting - AccountingTools",
+      "url": "https://www.accountingtools.com/articles/prepaid-expenses-accounting",
+      "relevance": "Prepaid expense mechanics"
+    },
+    {
+      "id": 27,
+      "title": "Accrued Liabilities - Investopedia",
+      "url": "https://www.investopedia.com/terms/a/accrued-liability.asp",
+      "relevance": "Accrued liability definitions and examples"
+    },
+    {
+      "id": 28,
+      "title": "Deferred Revenue - Corporate Finance Institute",
+      "url": "https://corporatefinanceinstitute.com/resources/accounting/deferred-revenue/",
+      "relevance": "Deferred revenue modeling"
+    },
+    {
+      "id": 29,
+      "title": "IAS 16 Property, Plant and Equipment - IFRS Foundation",
+      "url": "https://www.ifrs.org/content/dam/ifrs/publications/pdf-standards/english/2022/issued/part-a/ias-16-property-plant-and-equipment.pdf",
+      "relevance": "PP&E recognition, measurement, and disposal"
+    },
+    {
+      "id": 30,
+      "title": "IAS 16 Property, Plant and Equipment - IAS Plus",
+      "url": "https://www.iasplus.com/en/standards/ias/ias16",
+      "relevance": "IAS 16 summary and depreciation rules"
+    },
+    {
+      "id": 31,
+      "title": "IAS 38 Intangible Assets - IFRS Foundation",
+      "url": "https://www.ifrs.org/content/dam/ifrs/publications/pdf-standards/english/2021/issued/part-a/ias-38-intangible-assets.pdf",
+      "relevance": "Intangible asset recognition and amortization"
+    },
+    {
+      "id": 32,
+      "title": "Income Taxes - EY Financial Reporting Developments",
+      "url": "https://www.ey.com/content/dam/ey-unified-site/ey-com/en-us/technical/accountinglink/documents/ey-frdbb1150-09-11-2025.pdf",
+      "relevance": "ASC 740 comprehensive guide"
+    },
+    {
+      "id": 33,
+      "title": "Net Operating Losses (NOLs) - CCH",
+      "url": "https://answerconnect.cch.com/topic/0fc86db67c691000ab4a90b11c18c90202/net-operating-losses-nols",
+      "relevance": "NOL carryforward rules post-TCJA"
+    },
+    {
+      "id": 34,
+      "title": "ASC 740 Valuation Allowances - Bloomberg Tax",
+      "url": "https://pro.bloombergtax.com/insights/provision/asc-740-valuation-allowances-deferred-tax-assets/",
+      "relevance": "Valuation allowance assessment framework"
+    },
+    {
+      "id": 35,
+      "title": "Issuer's Accounting for Debt and Equity Financings - EY",
+      "url": "https://www.ey.com/content/dam/ey-unified-site/ey-com/en-us/technical/accountinglink/documents/ey-frd13740-211us-09-26-2024.pdf",
+      "relevance": "Debt accounting, OID, issuance costs"
+    },
+    {
+      "id": 36,
+      "title": "Additional Paid-In Capital (APIC) - Wall Street Prep",
+      "url": "https://www.wallstreetprep.com/knowledge/additional-paid-in-capital-apic/",
+      "relevance": "APIC roll-forward mechanics"
+    },
+    {
+      "id": 37,
+      "title": "Share-based Payment Handbook - KPMG",
+      "url": "https://kpmg.com/kpmg-us/content/dam/kpmg/frv/pdf/2025/handbook-share-based-payments.pdf",
+      "relevance": "Comprehensive SBC accounting guide"
+    },
+    {
+      "id": 38,
+      "title": "Share-Based Payments Under ASC 718 - BDO",
+      "url": "https://arch.bdo.com/getContentAsset/84e1cb94-ef77-45c2-aaea-743cb5701dc1/bb620d56-5e9c-4774-8d17-fb9323eefdf4/Share-Based-Payments-Under-ASC-718-BDO-Blueprint-01-2026.pdf",
+      "relevance": "ASC 718 forfeiture methods and TSM"
+    },
+    {
+      "id": 39,
+      "title": "Diluted EPS - PwC Viewpoint",
+      "url": "https://viewpoint.pwc.com/dt/us/en/pwc/accounting_guides/financial_statement_/financial_statement___18_US/chapter_7_earnings_p_US/75_diluted_eps_US.html",
+      "relevance": "Diluted EPS calculation methods"
+    },
+    {
+      "id": 40,
+      "title": "How to Build an Indirect Cash Flow Statement - ModelReef",
+      "url": "https://modelreef.io/resources/articles/three-statement-financial-modeling/how-to-build-an-indirect-cash-flow-statement-from-pl-balance-sheet",
+      "relevance": "CFS indirect method construction"
+    },
+    {
+      "id": 41,
+      "title": "Correction of an Error - PwC Viewpoint",
+      "url": "https://viewpoint.pwc.com/dt/us/en/pwc/accounting_guides/financial_statement_/financial_statement___18_US/chapter_30_accountin_US/307_correction_of_an_US.html",
+      "relevance": "Error correction and BS reconciliation"
+    },
+    {
+      "id": 42,
+      "title": "The 3-Statement Financial Model Explained - Rho",
+      "url": "https://www.rho.co/blog/3-statement-financial-model",
+      "relevance": "Three-statement model overview and debt roll-forward"
+    },
+    {
+      "id": 43,
+      "title": "10 Common Causes of Imbalance in 3-Statement Models - CFI",
+      "url": "https://corporatefinanceinstitute.com/resources/financial-modeling/common-causes-imbalanced-3-statement-models/",
+      "relevance": "Common model errors and diagnostic fixes"
+    },
+    {
+      "id": 44,
+      "title": "IFRS vs US GAAP Cash Flow Statement - KPMG",
+      "url": "https://kpmg.com/us/en/articles/2022/ifrs-accounting-standards-us-gaap.html",
+      "relevance": "GAAP/IFRS cash flow classification differences"
+    },
+    {
+      "id": 45,
+      "title": "Research and Development Costs - PwC Viewpoint",
+      "url": "https://viewpoint.pwc.com/dt/us/en/pwc/accounting_guides/property_plant_equip/property_plant_equip_US/chapter_7_other_asse_US/73_research_and_deve_US.html",
+      "relevance": "US GAAP R&D expense requirements"
+    },
+    {
+      "id": 46,
+      "title": "US GAAP vs IFRS Impairment of Long-Lived Assets - RSM",
+      "url": "https://rsmus.com/content/dam/rsm/insights/financial-reporting/us-gaap-vs-ifrs-comparisons/ifrs_impairment_of_long_lived_assets.pdf",
+      "relevance": "Impairment testing and reversal differences"
+    }
+  ]
+}
