@@ -31,6 +31,8 @@ import {
   AlertCircle,
   CheckCircle2,
   Download,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import {
@@ -180,9 +182,40 @@ function DetailedTable({
     [data.headers]
   );
 
+  // ── Sorting ──
+  const [sortCol, setSortCol] = React.useState<number | null>(null);
+  const [sortDir, setSortDir] = React.useState<"desc" | "asc">("desc");
+
+  function handleHeaderClick(colIdx: number) {
+    if (sortCol === colIdx) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortCol(colIdx);
+      setSortDir("desc");
+    }
+  }
+
+  const sortedRows = React.useMemo(() => {
+    if (sortCol === null) return data.rows;
+    const copy = [...data.rows];
+    const t = types[sortCol];
+    copy.sort((a, b) => {
+      const aVal = a[sortCol];
+      const bVal = b[sortCol];
+      let cmp: number;
+      if (t === "id" || t === "name") {
+        cmp = String(aVal).localeCompare(String(bVal));
+      } else {
+        cmp = (typeof aVal === "number" ? aVal : 0) - (typeof bVal === "number" ? bVal : 0);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return copy;
+  }, [data.rows, sortCol, sortDir, types]);
+
   const allNames = React.useMemo(
-    () => data.rows.map((row) => String(row[1])),
-    [data.rows]
+    () => sortedRows.map((row) => String(row[1])),
+    [sortedRows]
   );
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -269,17 +302,24 @@ function DetailedTable({
             <TableRow className="bg-slate-50">
               {data.headers.map((header, i) => {
                 const t = types[i];
+                const isSorted = sortCol === i;
                 return (
                   <TableHead
                     key={i}
                     className={cn(
-                      "whitespace-nowrap text-xs",
+                      "whitespace-nowrap text-xs cursor-pointer select-none hover:text-foreground",
                       t === "id" && "max-w-24",
                       t === "name" && "min-w-40 sticky left-0 bg-slate-50 z-10",
                       (t === "num" || t === "pct") && "text-right"
                     )}
+                    onClick={() => handleHeaderClick(i)}
                   >
                     {header}
+                    {isSorted && (
+                      sortDir === "asc"
+                        ? <ChevronUp className="ml-0.5 h-3 w-3 inline-block" />
+                        : <ChevronDown className="ml-0.5 h-3 w-3 inline-block" />
+                    )}
                   </TableHead>
                 );
               })}
@@ -292,7 +332,7 @@ function DetailedTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.rows.map((row, ri) => {
+            {sortedRows.map((row, ri) => {
               const stakeholderName = String(row[1]);
               const isSelected = selected.has(stakeholderName);
               return (
