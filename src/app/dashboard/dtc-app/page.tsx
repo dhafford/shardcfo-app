@@ -163,12 +163,14 @@ function DetailedTable({
   data,
   classifications,
   onClassify,
+  onBulkClassify,
   secondarySelections,
   onSecondarySelect,
 }: {
   data: DetailedCapTable;
   classifications: Record<string, Classification>;
   onClassify: (name: string, value: Classification) => void;
+  onBulkClassify: (names: string[], value: Classification) => void;
   secondarySelections: Record<string, string>;
   onSecondarySelect: (name: string, value: string) => void;
 }) {
@@ -178,108 +180,194 @@ function DetailedTable({
     [data.headers]
   );
 
+  const allNames = React.useMemo(
+    () => data.rows.map((row) => String(row[1])),
+    [data.rows]
+  );
+
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+
+  const allSelected = selected.size === allNames.length && allNames.length > 0;
+  const someSelected = selected.size > 0 && !allSelected;
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(allNames));
+  }
+
+  function toggleOne(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function applyBulk(value: Classification) {
+    onBulkClassify(Array.from(selected), value);
+    setSelected(new Set());
+  }
+
   return (
-    <div className="rounded-lg border overflow-auto">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-slate-50">
-            {data.headers.map((header, i) => {
-              const t = types[i];
+    <div className="space-y-0">
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 rounded-t-lg border border-b-0 bg-blue-50 px-4 py-2">
+          <span className="text-xs font-medium text-blue-800">
+            {selected.size} selected
+          </span>
+          <span className="text-xs text-blue-600">— classify as:</span>
+          {CLASSIFICATION_OPTIONS.map((opt) => (
+            <Button
+              key={opt.value}
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs bg-white"
+              onClick={() => applyBulk(opt.value)}
+            >
+              {opt.label}
+            </Button>
+          ))}
+          <button
+            onClick={() => setSelected(new Set())}
+            className="ml-auto text-xs text-blue-600 hover:text-blue-800"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "rounded-lg border overflow-auto",
+          selected.size > 0 && "rounded-t-none border-t-0"
+        )}
+      >
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50">
+              <TableHead className="w-10 px-2 bg-slate-50 z-10">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someSelected;
+                  }}
+                  onChange={toggleAll}
+                  className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
+                />
+              </TableHead>
+              {data.headers.map((header, i) => {
+                const t = types[i];
+                return (
+                  <TableHead
+                    key={i}
+                    className={cn(
+                      "whitespace-nowrap text-xs",
+                      t === "id" && "max-w-24",
+                      t === "name" && "min-w-40 sticky left-0 bg-slate-50 z-10",
+                      (t === "num" || t === "pct") && "text-right"
+                    )}
+                  >
+                    {header}
+                  </TableHead>
+                );
+              })}
+              <TableHead className="bg-slate-50 z-10 min-w-44 text-xs">
+                Classification
+              </TableHead>
+              <TableHead className="sticky right-0 bg-slate-50 z-10 min-w-52 text-xs">
+                Security Class
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.rows.map((row, ri) => {
+              const stakeholderName = String(row[1]);
+              const isSelected = selected.has(stakeholderName);
               return (
-                <TableHead
-                  key={i}
-                  className={cn(
-                    "whitespace-nowrap text-xs",
-                    t === "id" && "max-w-24",
-                    t === "name" && "min-w-40 sticky left-0 bg-slate-50 z-10",
-                    (t === "num" || t === "pct") && "text-right"
-                  )}
+                <TableRow
+                  key={ri}
+                  className={cn(isSelected && "bg-blue-50/50")}
                 >
-                  {header}
-                </TableHead>
+                  <TableCell className="w-10 px-2">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleOne(stakeholderName)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
+                    />
+                  </TableCell>
+                  {row.map((cell, ci) => {
+                    const t = types[ci];
+                    return (
+                      <TableCell
+                        key={ci}
+                        className={cn(
+                          "whitespace-nowrap text-xs",
+                          t === "id" && "max-w-24 truncate text-muted-foreground font-mono text-[10px]",
+                          t === "name" && "font-medium sticky left-0 z-10",
+                          t === "name" && (isSelected ? "bg-blue-50/50" : "bg-white"),
+                          (t === "num" || t === "pct") && "text-right tabular-nums",
+                          t === "num" && typeof cell === "number" && cell === 0 && "text-muted-foreground"
+                        )}
+                      >
+                        {formatCell(cell, t)}
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell className={cn("z-10", isSelected ? "bg-blue-50/50" : "bg-white")}>
+                    <Select
+                      value={classifications[stakeholderName] ?? ""}
+                      onValueChange={(v) => {
+                        if (v) onClassify(stakeholderName, v as Classification);
+                      }}
+                    >
+                      <SelectTrigger size="sm" className="w-44 text-xs">
+                        <SelectValue placeholder="Select role…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CLASSIFICATION_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className={cn("sticky right-0 z-10", isSelected ? "bg-blue-50/50" : "bg-white")}>
+                    <Select
+                      value={secondarySelections[stakeholderName] ?? ""}
+                      onValueChange={(v) => {
+                        if (v) onSecondarySelect(stakeholderName, v);
+                      }}
+                      disabled={classifications[stakeholderName] !== "secondary"}
+                    >
+                      <SelectTrigger
+                        size="sm"
+                        className={cn(
+                          "w-52 text-xs",
+                          classifications[stakeholderName] !== "secondary" &&
+                            "opacity-40"
+                        )}
+                      >
+                        <SelectValue placeholder="Select class…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {securityColumns.map((col) => (
+                          <SelectItem key={col} value={col}>
+                            {col}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                </TableRow>
               );
             })}
-            <TableHead className="bg-slate-50 z-10 min-w-44 text-xs">
-              Classification
-            </TableHead>
-            <TableHead className="sticky right-0 bg-slate-50 z-10 min-w-52 text-xs">
-              Security Class
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.rows.map((row, ri) => {
-            const stakeholderName = String(row[1]);
-            return (
-              <TableRow key={ri}>
-                {row.map((cell, ci) => {
-                  const t = types[ci];
-                  return (
-                    <TableCell
-                      key={ci}
-                      className={cn(
-                        "whitespace-nowrap text-xs",
-                        t === "id" && "max-w-24 truncate text-muted-foreground font-mono text-[10px]",
-                        t === "name" && "font-medium sticky left-0 bg-white z-10",
-                        (t === "num" || t === "pct") && "text-right tabular-nums",
-                        t === "num" && typeof cell === "number" && cell === 0 && "text-muted-foreground"
-                      )}
-                    >
-                      {formatCell(cell, t)}
-                    </TableCell>
-                  );
-                })}
-                <TableCell className="bg-white z-10">
-                  <Select
-                    value={classifications[stakeholderName] ?? ""}
-                    onValueChange={(v) => {
-                      if (v) onClassify(stakeholderName, v as Classification);
-                    }}
-                  >
-                    <SelectTrigger size="sm" className="w-44 text-xs">
-                      <SelectValue placeholder="Select role…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CLASSIFICATION_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell className="sticky right-0 bg-white z-10">
-                  <Select
-                    value={secondarySelections[stakeholderName] ?? ""}
-                    onValueChange={(v) => {
-                      if (v) onSecondarySelect(stakeholderName, v);
-                    }}
-                    disabled={classifications[stakeholderName] !== "secondary"}
-                  >
-                    <SelectTrigger
-                      size="sm"
-                      className={cn(
-                        "w-52 text-xs",
-                        classifications[stakeholderName] !== "secondary" &&
-                          "opacity-40"
-                      )}
-                    >
-                      <SelectValue placeholder="Select class…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {securityColumns.map((col) => (
-                        <SelectItem key={col} value={col}>
-                          {col}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
@@ -342,6 +430,22 @@ export default function DtcAppPage() {
       setSecondarySelections((prev) => {
         const next = { ...prev };
         delete next[name];
+        return next;
+      });
+    }
+  }
+
+  function handleBulkClassify(names: string[], value: Classification) {
+    setClassifications((prev) => {
+      const next = { ...prev };
+      for (const name of names) next[name] = value;
+      return next;
+    });
+    // Clear secondary selections for non-secondary bulk assigns
+    if (value !== "secondary") {
+      setSecondarySelections((prev) => {
+        const next = { ...prev };
+        for (const name of names) delete next[name];
         return next;
       });
     }
@@ -549,6 +653,7 @@ export default function DtcAppPage() {
               data={data}
               classifications={classifications}
               onClassify={handleClassify}
+              onBulkClassify={handleBulkClassify}
               secondarySelections={secondarySelections}
               onSecondarySelect={handleSecondarySelect}
             />

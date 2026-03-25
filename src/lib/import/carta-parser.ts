@@ -409,6 +409,24 @@ function parseDetailedRows(rows: unknown[][]): DetailedCapTable {
     dataRows.push(cells);
   }
 
+  // Sort: "Dell Technologies Capital" always first, then by Fully Diluted
+  // Ownership descending (last column in header row).
+  const fdOwnershipIdx = headers.findIndex((h) =>
+    /fully diluted\s*ownership/i.test(h.replace(/\n/g, " "))
+  );
+  dataRows.sort((a, b) => {
+    const aIsDTC = /^dell technologies capital/i.test(String(a[1]));
+    const bIsDTC = /^dell technologies capital/i.test(String(b[1]));
+    if (aIsDTC && !bIsDTC) return -1;
+    if (!aIsDTC && bIsDTC) return 1;
+    if (fdOwnershipIdx >= 0) {
+      const aOwn = typeof a[fdOwnershipIdx] === "number" ? a[fdOwnershipIdx] as number : 0;
+      const bOwn = typeof b[fdOwnershipIdx] === "number" ? b[fdOwnershipIdx] as number : 0;
+      return bOwn - aOwn; // descending
+    }
+    return 0;
+  });
+
   return { companyName, asOfDate, generatedBy, headers, rows: dataRows };
 }
 
