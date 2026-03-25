@@ -227,10 +227,8 @@ function DetailedTable({
   }
 
   function onRowMouseDown(ri: number, e: React.MouseEvent) {
-    // Don't interfere with clicks on selects / buttons
-    const tag = (e.target as HTMLElement).closest(
-      "button, select, [data-slot='select-trigger'], [data-slot='select-item']"
-    );
+    // Don't interfere with clicks on selects / buttons / native form elements
+    const tag = (e.target as HTMLElement).closest("button, select, option");
     if (tag) return;
 
     e.preventDefault(); // prevent text selection
