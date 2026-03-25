@@ -34,28 +34,40 @@ export function runProjection(
   let priorRevenue = lastHistorical.revenue;
   let priorRevenueByStream = { ...lastHistorical.revenueByStream };
 
-  // BS prior values — initialize from zero since we may not have historical BS
-  let priorCash = 0;
-  let priorAR = priorRevenue * 35 / 365; // estimate from revenue
+  // BS prior values — initialize from revenue-based estimates.
+  // The opening BS MUST balance (A = L + E), or the imbalance propagates
+  // through every projected period. We set Retained Earnings as the plug.
+  let priorAR = priorRevenue * 35 / 365;
   let priorPrepaid = priorRevenue * 0.03;
+  let priorPPE = priorRevenue * 0.05;
+  let priorCapSoftware = priorRevenue * 0.08;
+  let priorShortTermInvestments = 0;
+  let priorGoodwill = 0;
+  let priorIntangibles = 0;
+  let priorOtherNonCurrentAssets = 0;
+
   let priorAP = lastHistorical.cogs * 30 / 365;
   let priorAccrued = priorRevenue * 0.06;
   let priorDeferredRevCurrent = priorRevenue * 0.08;
   let priorDeferredRevNonCurrent = priorRevenue * 0.02;
   let priorOtherCurrentLiab = priorRevenue * 0.02;
-  let priorPPE = priorRevenue * 0.05;
-  let priorCapSoftware = priorRevenue * 0.08;
   let priorLongTermDebt = 0;
-  let priorAPIC = 0;
-  let priorRetainedEarnings = 0;
-  let priorTreasuryStock = 0;
-  let priorShortTermInvestments = 0;
-  let priorGoodwill = 0;
-  let priorIntangibles = 0;
-  let priorOtherNonCurrentAssets = 0;
   let priorCurrentDebt = 0;
   let priorOtherNonCurrentLiab = 0;
+
+  let priorAPIC = 0;
+  let priorTreasuryStock = 0;
   let priorCommonStock = 0;
+
+  // Compute opening totals, then set Cash and RE to force balance
+  const initTotalAssetExCash = priorShortTermInvestments + priorAR + priorPrepaid
+    + priorPPE + priorGoodwill + priorIntangibles + priorCapSoftware + priorOtherNonCurrentAssets;
+  const initTotalLiab = priorAP + priorAccrued + priorDeferredRevCurrent + priorCurrentDebt
+    + priorOtherCurrentLiab + priorLongTermDebt + priorDeferredRevNonCurrent + priorOtherNonCurrentLiab;
+
+  // RE = plug so that A = L + E. Cash starts at 0, RE absorbs the gap.
+  let priorCash = 0;
+  let priorRetainedEarnings = (priorCash + initTotalAssetExCash) - initTotalLiab - priorCommonStock - priorAPIC - priorTreasuryStock;
 
   for (let i = 0; i < Math.min(PROJECTION_YEARS, assumptions.cogsPercent.length); i++) {
     const year = startYear + i;
