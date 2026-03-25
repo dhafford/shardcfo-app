@@ -18,13 +18,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+// Native <select> used for classification dropdowns — base-ui Select does not
+// reliably reflect externally-set values (e.g. from bulk classify).
 import {
   FileSpreadsheet,
   Loader2,
@@ -364,52 +359,44 @@ function DetailedTable({
                     );
                   })}
                   <TableCell className={cn("z-10", isSelected ? "bg-blue-50/50" : "bg-white")}>
-                    <Select
-                      key={`cls-${stakeholderName}-${classifications[stakeholderName] ?? ""}`}
+                    <select
                       value={classifications[stakeholderName] ?? ""}
-                      onValueChange={(v) => {
-                        if (v) onClassify(stakeholderName, v as Classification);
+                      onChange={(e) => {
+                        if (e.target.value) onClassify(stakeholderName, e.target.value as Classification);
                       }}
+                      className="h-7 w-44 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:border-ring focus:ring-2 focus:ring-ring/50"
                     >
-                      <SelectTrigger size="sm" className="w-44 text-xs">
-                        <SelectValue placeholder="Select role…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CLASSIFICATION_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <option value="" disabled>
+                        Select role…
+                      </option>
+                      {CLASSIFICATION_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
                   </TableCell>
                   <TableCell className={cn("sticky right-0 z-10", isSelected ? "bg-blue-50/50" : "bg-white")}>
-                    <Select
-                      key={`sec-${stakeholderName}-${secondarySelections[stakeholderName] ?? ""}-${classifications[stakeholderName] ?? ""}`}
+                    <select
                       value={secondarySelections[stakeholderName] ?? ""}
-                      onValueChange={(v) => {
-                        if (v) onSecondarySelect(stakeholderName, v);
+                      onChange={(e) => {
+                        if (e.target.value) onSecondarySelect(stakeholderName, e.target.value);
                       }}
                       disabled={classifications[stakeholderName] !== "secondary"}
+                      className={cn(
+                        "h-7 w-52 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:border-ring focus:ring-2 focus:ring-ring/50",
+                        classifications[stakeholderName] !== "secondary" && "opacity-40 cursor-not-allowed"
+                      )}
                     >
-                      <SelectTrigger
-                        size="sm"
-                        className={cn(
-                          "w-52 text-xs",
-                          classifications[stakeholderName] !== "secondary" &&
-                            "opacity-40"
-                        )}
-                      >
-                        <SelectValue placeholder="Select class…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {securityColumns.map((col) => (
-                          <SelectItem key={col} value={col}>
-                            {col}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <option value="" disabled>
+                        Select class…
+                      </option>
+                      {securityColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </select>
                   </TableCell>
                 </TableRow>
               );
