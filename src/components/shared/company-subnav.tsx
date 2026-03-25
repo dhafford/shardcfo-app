@@ -25,6 +25,7 @@ export function CompanySubnav({ companyId }: CompanySubnavProps) {
     { label: "Metrics", href: `${base}/metrics` },
     { label: "Budget", href: `${base}/budget` },
     { label: "Projections", href: `${base}/projections` },
+    { label: "Model Builder", href: `${base}/model-builder` },
     { label: "Scenarios", href: `${base}/scenarios` },
     { label: "Diligence", href: `${base}/diligence` },
     { label: "Board Deck", href: `${base}/board-deck` },

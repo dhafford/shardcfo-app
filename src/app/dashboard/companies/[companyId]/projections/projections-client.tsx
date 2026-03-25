@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronRight, ChevronLeft, Settings2, BarChart3, TrendingUp } from "lucide-react";
+import { ChevronRight, ChevronLeft, Settings2, BarChart3, TrendingUp, Download } from "lucide-react";
 import { type HistoricalYear, type ProjectedYear, type ProjectionAssumptions } from "@/lib/projections/types";
 import { getIndustryBenchmarks } from "@/lib/projections/benchmarks";
 import { runProjection } from "@/lib/projections/engine";
@@ -60,6 +60,7 @@ function formatPct(n: number): string {
 // ---------------------------------------------------------------------------
 
 export function ProjectionsClient({
+  companyId,
   companyName,
   industry,
   historicals,
@@ -78,6 +79,38 @@ export function ProjectionsClient({
     () => runProjection(historicals, assumptions),
     [historicals, assumptions]
   );
+
+  const [isExporting, setIsExporting] = React.useState(false);
+
+  async function exportToExcel() {
+    setIsExporting(true);
+    try {
+      const res = await fetch("/api/generate-xlsx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "projection",
+          companyId,
+          historicals,
+          projected,
+          assumptions,
+          companyName,
+        }),
+      });
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${companyName.replace(/[^a-zA-Z0-9 _-]/g, "")} - 3-Statement Model.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Could add toast notification here
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
 
@@ -212,6 +245,15 @@ export function ProjectionsClient({
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep("assumptions")}>
               <ChevronLeft className="w-4 h-4 mr-1" /> Edit Assumptions
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportToExcel}
+              disabled={isExporting || projected.length === 0}
+              className="gap-1.5"
+            >
+              <Download className="w-4 h-4" />
+              {isExporting ? "Exporting…" : "Export to Excel"}
             </Button>
           </div>
         </div>

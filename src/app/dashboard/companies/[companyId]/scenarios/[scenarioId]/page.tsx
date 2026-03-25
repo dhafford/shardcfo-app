@@ -16,7 +16,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { Loader2, ArrowLeft, Play, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, Play, Trash2, Download } from "lucide-react";
 import Link from "next/link";
 import {
   LineChart,
@@ -235,6 +235,38 @@ export default function ScenarioEditorPage() {
   const [currentAssumptions, setCurrentAssumptions] =
     useState<ScenarioAssumptions | null>(null);
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  async function exportScenarioToExcel() {
+    if (!projection) return;
+    setIsExporting(true);
+    try {
+      const res = await fetch("/api/generate-xlsx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "scenario",
+          companyId,
+          projection,
+          scenarioAssumptions: currentAssumptions,
+          scenarioName: `Scenario ${scenarioId.substring(0, 8)}`,
+        }),
+      });
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Scenario ${scenarioId.substring(0, 8)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Could add toast
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   const runProjection = useCallback(() => {
     setProjError(null);
     startTransition(async () => {
@@ -309,19 +341,33 @@ export default function ScenarioEditorPage() {
               {scenarioId.substring(0, 8)}
             </Badge>
           </div>
-          <Button
-            size="sm"
-            onClick={runProjection}
-            disabled={isPending}
-            className="gap-1.5"
-          >
-            {isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Play className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={runProjection}
+              disabled={isPending}
+              className="gap-1.5"
+            >
+              {isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Play className="w-3.5 h-3.5" />
+              )}
+              Run projection
+            </Button>
+            {projection && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={exportScenarioToExcel}
+                disabled={isExporting}
+                className="gap-1.5"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {isExporting ? "Exporting…" : "Export"}
+              </Button>
             )}
-            Run projection
-          </Button>
+          </div>
         </div>
 
         {projError && (
