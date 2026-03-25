@@ -186,21 +186,36 @@ function DetailedTable({
   );
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const lastClickedIdx = React.useRef<number | null>(null);
 
   const allSelected = selected.size === allNames.length && allNames.length > 0;
   const someSelected = selected.size > 0 && !allSelected;
 
   function toggleAll() {
     setSelected(allSelected ? new Set() : new Set(allNames));
+    lastClickedIdx.current = null;
   }
 
-  function toggleOne(name: string) {
+  function toggleOne(rowIdx: number, shiftKey: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+
+      if (shiftKey && lastClickedIdx.current !== null) {
+        // Range select: select everything between last clicked and current
+        const from = Math.min(lastClickedIdx.current, rowIdx);
+        const to = Math.max(lastClickedIdx.current, rowIdx);
+        for (let i = from; i <= to; i++) {
+          next.add(allNames[i]);
+        }
+      } else {
+        const name = allNames[rowIdx];
+        if (next.has(name)) next.delete(name);
+        else next.add(name);
+      }
+
       return next;
     });
+    lastClickedIdx.current = rowIdx;
   }
 
   function applyBulk(value: Classification) {
@@ -294,7 +309,7 @@ function DetailedTable({
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={() => toggleOne(stakeholderName)}
+                      onChange={(e) => toggleOne(ri, e.nativeEvent instanceof MouseEvent ? e.nativeEvent.shiftKey : false)}
                       className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
                     />
                   </TableCell>
