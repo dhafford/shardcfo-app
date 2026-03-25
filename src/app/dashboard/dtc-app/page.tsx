@@ -365,6 +365,7 @@ function DetailedTable({
                   })}
                   <TableCell className={cn("z-10", isSelected ? "bg-blue-50/50" : "bg-white")}>
                     <Select
+                      key={`cls-${stakeholderName}-${classifications[stakeholderName] ?? ""}`}
                       value={classifications[stakeholderName] ?? ""}
                       onValueChange={(v) => {
                         if (v) onClassify(stakeholderName, v as Classification);
@@ -384,6 +385,7 @@ function DetailedTable({
                   </TableCell>
                   <TableCell className={cn("sticky right-0 z-10", isSelected ? "bg-blue-50/50" : "bg-white")}>
                     <Select
+                      key={`sec-${stakeholderName}-${secondarySelections[stakeholderName] ?? ""}-${classifications[stakeholderName] ?? ""}`}
                       value={secondarySelections[stakeholderName] ?? ""}
                       onValueChange={(v) => {
                         if (v) onSecondarySelect(stakeholderName, v);
