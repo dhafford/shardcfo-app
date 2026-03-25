@@ -186,37 +186,43 @@ function DetailedTable({
   );
 
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
-  const lastClickedIdx = React.useRef<number | null>(null);
+  const dragging = React.useRef(false);
+  const dragAnchor = React.useRef<number | null>(null);
 
-  const allSelected = selected.size === allNames.length && allNames.length > 0;
-  const someSelected = selected.size > 0 && !allSelected;
-
-  function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(allNames));
-    lastClickedIdx.current = null;
+  // Build the range from anchor to current index during drag
+  function rangeSet(from: number, to: number): Set<string> {
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    const s = new Set<string>();
+    for (let i = lo; i <= hi; i++) s.add(allNames[i]);
+    return s;
   }
 
-  function toggleOne(rowIdx: number, shiftKey: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev);
+  function onRowMouseDown(ri: number, e: React.MouseEvent) {
+    // Don't interfere with clicks on selects / buttons
+    const tag = (e.target as HTMLElement).closest(
+      "button, [data-slot='select-trigger'], [data-slot='select-item']"
+    );
+    if (tag) return;
 
-      if (shiftKey && lastClickedIdx.current !== null) {
-        // Range select: select everything between last clicked and current
-        const from = Math.min(lastClickedIdx.current, rowIdx);
-        const to = Math.max(lastClickedIdx.current, rowIdx);
-        for (let i = from; i <= to; i++) {
-          next.add(allNames[i]);
-        }
-      } else {
-        const name = allNames[rowIdx];
-        if (next.has(name)) next.delete(name);
-        else next.add(name);
-      }
-
-      return next;
-    });
-    lastClickedIdx.current = rowIdx;
+    e.preventDefault(); // prevent text selection
+    dragging.current = true;
+    dragAnchor.current = ri;
+    setSelected(new Set([allNames[ri]]));
   }
+
+  function onRowMouseEnter(ri: number) {
+    if (!dragging.current || dragAnchor.current === null) return;
+    setSelected(rangeSet(dragAnchor.current, ri));
+  }
+
+  React.useEffect(() => {
+    function handleMouseUp() {
+      dragging.current = false;
+    }
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => window.removeEventListener("mouseup", handleMouseUp);
+  }, []);
 
   function applyBulk(value: Classification) {
     onBulkClassify(Array.from(selected), value);
@@ -261,17 +267,6 @@ function DetailedTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50">
-              <TableHead className="w-10 px-2 bg-slate-50 z-10">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someSelected;
-                  }}
-                  onChange={toggleAll}
-                  className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
-                />
-              </TableHead>
               {data.headers.map((header, i) => {
                 const t = types[i];
                 return (
@@ -303,16 +298,13 @@ function DetailedTable({
               return (
                 <TableRow
                   key={ri}
-                  className={cn(isSelected && "bg-blue-50/50")}
+                  className={cn(
+                    isSelected && "bg-blue-50/50",
+                    "select-none"
+                  )}
+                  onMouseDown={(e) => onRowMouseDown(ri, e)}
+                  onMouseEnter={() => onRowMouseEnter(ri)}
                 >
-                  <TableCell className="w-10 px-2">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(e) => toggleOne(ri, e.nativeEvent instanceof MouseEvent ? e.nativeEvent.shiftKey : false)}
-                      className="h-3.5 w-3.5 rounded border-slate-300 accent-blue-600"
-                    />
-                  </TableCell>
                   {row.map((cell, ci) => {
                     const t = types[ci];
                     return (
@@ -321,7 +313,7 @@ function DetailedTable({
                         className={cn(
                           "whitespace-nowrap text-xs",
                           t === "id" && "max-w-24 truncate text-muted-foreground font-mono text-[10px]",
-                          t === "name" && "font-medium sticky left-0 z-10",
+                          t === "name" && "font-medium sticky left-0 z-10 cursor-default",
                           t === "name" && (isSelected ? "bg-blue-50/50" : "bg-white"),
                           (t === "num" || t === "pct") && "text-right tabular-nums",
                           t === "num" && typeof cell === "number" && cell === 0 && "text-muted-foreground"
