@@ -11,6 +11,9 @@ import {
   ChevronLeft,
   ChevronRight,
   BarChart3,
+  FileText,
+  Smartphone,
+  Zap,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
@@ -111,6 +114,54 @@ export function Sidebar({ profile, companies }: SidebarProps) {
             })}
           </div>
         )}
+
+        {/* Templates */}
+        <div className="mt-3">
+          {!collapsed && (
+            <p className="mb-1 px-3 text-[0.625rem] font-semibold uppercase tracking-widest text-slate-500">
+              Templates
+            </p>
+          )}
+          <NavItem
+            href="/dashboard/templates"
+            icon={<FileText className="size-4 shrink-0" />}
+            label="Templates"
+            collapsed={collapsed}
+            active={pathname.startsWith("/dashboard/templates")}
+          />
+        </div>
+
+        {/* DTC App */}
+        <div className="mt-3">
+          {!collapsed && (
+            <p className="mb-1 px-3 text-[0.625rem] font-semibold uppercase tracking-widest text-slate-500">
+              DTC App
+            </p>
+          )}
+          <NavItem
+            href="/dashboard/dtc-app"
+            icon={<Smartphone className="size-4 shrink-0" />}
+            label="DTC App"
+            collapsed={collapsed}
+            active={pathname.startsWith("/dashboard/dtc-app")}
+          />
+        </div>
+
+        {/* Forge */}
+        <div className="mt-3">
+          {!collapsed && (
+            <p className="mb-1 px-3 text-[0.625rem] font-semibold uppercase tracking-widest text-slate-500">
+              Forge
+            </p>
+          )}
+          <NavItem
+            href="/dashboard/forge"
+            icon={<Zap className="size-4 shrink-0" />}
+            label="Forge"
+            collapsed={collapsed}
+            active={pathname.startsWith("/dashboard/forge")}
+          />
+        </div>
 
         {/* Settings */}
         <div className="mt-3">

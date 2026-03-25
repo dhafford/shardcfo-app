@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/supabase/require-auth";
+import ExcelJS from "exceljs";
 import {
   buildProjectionWorkbook,
   buildScenarioWorkbook,
 } from "@/lib/export/xlsx-builder";
+import { auditWorkbook } from "@/lib/forge/banker-audit";
+import type { AuditReport } from "@/lib/forge/banker-audit";
 import type {
   HistoricalYear,
   ProjectedYear,
@@ -92,11 +95,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Run Banker Bible audit on the generated workbook
+    let auditReport: AuditReport | null = null;
+    try {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+      auditReport = auditWorkbook(wb);
+      console.log(
+        `[BANKER AUDIT] ${filename}: ${auditReport.totalPassed}/${auditReport.total} (${Math.round(auditReport.scorePct)}%) | Section A: ${auditReport.sectionAPass ? "PASS" : "FAIL"}`
+      );
+      if (!auditReport.sectionAPass) {
+        console.warn(
+          `[BANKER AUDIT] Section A failures:`,
+          auditReport.sectionAFailures.map((r) => `${r.checkId}: ${r.description}`),
+        );
+      }
+    } catch (auditErr) {
+      console.error("[BANKER AUDIT] Audit failed:", auditErr);
+    }
+
     return new NextResponse(buffer as unknown as BodyInit, {
       headers: {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${filename}.xlsx"`,
+        // Include audit results in response headers for the frontend
+        "X-Banker-Audit-Score": auditReport ? `${auditReport.totalPassed}/${auditReport.total}` : "N/A",
+        "X-Banker-Audit-Section-A": auditReport ? (auditReport.sectionAPass ? "PASS" : "FAIL") : "N/A",
+        "X-Banker-Audit-Pct": auditReport ? `${Math.round(auditReport.scorePct)}` : "0",
       },
     });
   } catch (error) {
