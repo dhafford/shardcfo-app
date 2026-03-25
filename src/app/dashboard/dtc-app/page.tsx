@@ -30,7 +30,9 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Download,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import {
   parseCartaDetailedOnly,
   type DetailedCapTable,
@@ -45,6 +47,23 @@ const CLASSIFICATION_OPTIONS = [
 ] as const;
 
 type Classification = (typeof CLASSIFICATION_OPTIONS)[number]["value"];
+
+const CLASSIFICATION_LABELS: Record<Classification, string> = {
+  primary: "Primary Investor",
+  secondary: "Secondary Investor",
+  founders: "Founders / Mgmt",
+};
+
+// ─── Security column options (between Name and Outstanding Shares) ───────────
+
+function getSecurityColumns(headers: string[]): string[] {
+  const nameIdx = headers.findIndex((h) => /^name$/i.test(h));
+  const outstandingIdx = headers.findIndex((h) =>
+    /^outstanding\s*shares$/i.test(h.replace(/\n/g, " "))
+  );
+  if (nameIdx < 0 || outstandingIdx < 0) return [];
+  return headers.slice(nameIdx + 1, outstandingIdx);
+}
 
 // ─── Column formatting helpers ───────────────────────────────────────────────
 
@@ -144,12 +163,20 @@ function DetailedTable({
   data,
   classifications,
   onClassify,
+  secondarySelections,
+  onSecondarySelect,
 }: {
   data: DetailedCapTable;
   classifications: Record<string, Classification>;
   onClassify: (name: string, value: Classification) => void;
+  secondarySelections: Record<string, string>;
+  onSecondarySelect: (name: string, value: string) => void;
 }) {
   const types = React.useMemo(() => data.headers.map(colType), [data.headers]);
+  const securityColumns = React.useMemo(
+    () => getSecurityColumns(data.headers),
+    [data.headers]
+  );
 
   return (
     <div className="rounded-lg border overflow-auto">
@@ -172,8 +199,11 @@ function DetailedTable({
                 </TableHead>
               );
             })}
-            <TableHead className="sticky right-0 bg-slate-50 z-10 min-w-44 text-xs">
+            <TableHead className="bg-slate-50 z-10 min-w-44 text-xs">
               Classification
+            </TableHead>
+            <TableHead className="sticky right-0 bg-slate-50 z-10 min-w-52 text-xs">
+              Security Class
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -199,7 +229,7 @@ function DetailedTable({
                     </TableCell>
                   );
                 })}
-                <TableCell className="sticky right-0 bg-white z-10">
+                <TableCell className="bg-white z-10">
                   <Select
                     value={classifications[stakeholderName] ?? ""}
                     onValueChange={(v) => {
@@ -213,6 +243,33 @@ function DetailedTable({
                       {CLASSIFICATION_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell className="sticky right-0 bg-white z-10">
+                  <Select
+                    value={secondarySelections[stakeholderName] ?? ""}
+                    onValueChange={(v) => {
+                      if (v) onSecondarySelect(stakeholderName, v);
+                    }}
+                    disabled={classifications[stakeholderName] !== "secondary"}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className={cn(
+                        "w-52 text-xs",
+                        classifications[stakeholderName] !== "secondary" &&
+                          "opacity-40"
+                      )}
+                    >
+                      <SelectValue placeholder="Select class…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {securityColumns.map((col) => (
+                        <SelectItem key={col} value={col}>
+                          {col}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -242,6 +299,10 @@ export default function DtcAppPage() {
   const [classifications, setClassifications] = React.useState<
     Record<string, Classification>
   >({});
+  const [secondarySelections, setSecondarySelections] = React.useState<
+    Record<string, string>
+  >({});
+  const [exporting, setExporting] = React.useState(false);
 
   async function handleFile(file: File) {
     if (!/\.(xlsx|xls)$/i.test(file.name)) {
@@ -270,11 +331,85 @@ export default function DtcAppPage() {
     if (status.state === "success") {
       setData(status.data);
       setClassifications({});
+      setSecondarySelections({});
     }
   }
 
   function handleClassify(name: string, value: Classification) {
     setClassifications((prev) => ({ ...prev, [name]: value }));
+    // Clear secondary selection when switching away from secondary
+    if (value !== "secondary") {
+      setSecondarySelections((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+    }
+  }
+
+  function handleSecondarySelect(name: string, value: string) {
+    setSecondarySelections((prev) => ({ ...prev, [name]: value }));
+  }
+
+  // Every stakeholder must have a classification, and every secondary must
+  // also have a security class selected.
+  const allClassified = React.useMemo(() => {
+    if (!data) return false;
+    for (const row of data.rows) {
+      const name = String(row[1]);
+      const cls = classifications[name];
+      if (!cls) return false;
+      if (cls === "secondary" && !secondarySelections[name]) return false;
+    }
+    return true;
+  }, [data, classifications, secondarySelections]);
+
+  async function handleExport() {
+    if (!data || !allClassified) return;
+    setExporting(true);
+
+    try {
+      // Fetch the FORMAT.xlsx template
+      const res = await fetch("/templates/FORMAT.xlsx");
+      if (!res.ok) throw new Error("Failed to load FORMAT.xlsx template");
+      const templateBuf = await res.arrayBuffer();
+      const wb = XLSX.read(new Uint8Array(templateBuf), { type: "array" });
+
+      // Build the classified Carta data sheet
+      const exportHeaders = [
+        ...data.headers,
+        "Classification",
+        "Security Class",
+      ];
+      const exportRows = data.rows.map((row) => {
+        const name = String(row[1]);
+        const cls = classifications[name] as Classification;
+        return [
+          ...row,
+          CLASSIFICATION_LABELS[cls],
+          cls === "secondary" ? (secondarySelections[name] ?? "") : "",
+        ];
+      });
+
+      const aoa = [exportHeaders, ...exportRows];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+      // Append the new sheet, then move it to position 0 (leftmost tab)
+      const sheetName = "Carta Import";
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      const idx = wb.SheetNames.indexOf(sheetName);
+      if (idx > 0) {
+        wb.SheetNames.splice(idx, 1);
+        wb.SheetNames.unshift(sheetName);
+      }
+
+      const exportName = `${data.companyName.replace(/[^a-zA-Z0-9 ]/g, "")} - DTC Model.xlsx`;
+      XLSX.writeFile(wb, exportName);
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setExporting(false);
+    }
   }
 
   const preview = status.state === "success" ? status.data : null;
@@ -380,25 +515,50 @@ export default function DtcAppPage() {
                   {data.rows.length} stakeholders
                 </p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setData(null);
-                  setStatus({ state: "idle" });
-                  setFileName(null);
-                  setClassifications({});
-                }}
-              >
-                Import new file
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={!allClassified || exporting}
+                  onClick={handleExport}
+                  className="gap-1.5"
+                >
+                  {exporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  {exporting ? "Exporting…" : "Export .xlsx"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setData(null);
+                    setStatus({ state: "idle" });
+                    setFileName(null);
+                    setClassifications({});
+                    setSecondarySelections({});
+                  }}
+                >
+                  Import new file
+                </Button>
+              </div>
             </div>
 
             <DetailedTable
               data={data}
               classifications={classifications}
               onClassify={handleClassify}
+              secondarySelections={secondarySelections}
+              onSecondarySelect={handleSecondarySelect}
             />
+
+            {!allClassified && (
+              <p className="text-xs text-muted-foreground">
+                {Object.keys(classifications).length} / {data.rows.length}{" "}
+                classified — classify all stakeholders to enable export
+              </p>
+            )}
           </>
         )}
       </div>
