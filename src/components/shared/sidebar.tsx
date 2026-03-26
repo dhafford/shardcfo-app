@@ -10,10 +10,23 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  BarChart3,
+  ChevronDown,
   FileText,
   Smartphone,
   Zap,
+  FolderOpen,
+  LayoutDashboard,
+  DollarSign,
+  BarChart3,
+  PiggyBank,
+  TrendingUp,
+  Wrench,
+  GitBranch,
+  Search,
+  Presentation,
+  FolderOpen as FolderIcon,
+  Settings as SettingsIcon,
+  Upload,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
@@ -67,15 +80,15 @@ export function Sidebar({ profile, companies }: SidebarProps) {
       className="relative flex h-full flex-col transition-[width] duration-200 ease-in-out"
     >
       {/* Logo / Brand */}
-      <div className="flex h-16 shrink-0 items-center gap-2.5 px-4 overflow-hidden">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-500">
-          <BarChart3 className="size-5 text-white" />
-        </div>
-        {!collapsed && (
-          <span className="text-base font-semibold tracking-tight text-white truncate">
-            ShardCFO
-          </span>
-        )}
+      <div className="flex h-20 shrink-0 items-center px-3 overflow-hidden">
+        <img
+          src="/logo.svg"
+          alt="ShardCFO"
+          className={cn(
+            "h-20 shrink-0 transition-all duration-200",
+            collapsed ? "w-10 object-left object-cover" : "w-auto"
+          )}
+        />
       </div>
 
       <Separator className="bg-white/10" />
@@ -98,20 +111,14 @@ export function Sidebar({ profile, companies }: SidebarProps) {
                 Companies
               </p>
             )}
-            {companies.map((company) => {
-              const companyPath = `/dashboard/companies/${company.id}`
-              const isActive = pathname.startsWith(companyPath)
-              return (
-                <NavItem
-                  key={company.id}
-                  href={companyPath}
-                  icon={<Building2 className="size-4 shrink-0" />}
-                  label={company.name}
-                  collapsed={collapsed}
-                  active={isActive}
-                />
-              )
-            })}
+            {companies.map((company) => (
+              <CompanyNavItem
+                key={company.id}
+                company={company}
+                pathname={pathname}
+                collapsed={collapsed}
+              />
+            ))}
           </div>
         )}
 
@@ -163,22 +170,34 @@ export function Sidebar({ profile, companies }: SidebarProps) {
           />
         </div>
 
-        {/* Settings */}
+        {/* Files */}
         <div className="mt-3">
           {!collapsed && (
             <p className="mb-1 px-3 text-[0.625rem] font-semibold uppercase tracking-widest text-slate-500">
-              Account
+              Files
             </p>
           )}
           <NavItem
-            href="/dashboard/settings"
-            icon={<Settings className="size-4 shrink-0" />}
-            label="Settings"
+            href="/dashboard/files"
+            icon={<FolderOpen className="size-4 shrink-0" />}
+            label="All Files"
             collapsed={collapsed}
-            active={pathname === "/dashboard/settings"}
+            active={pathname.startsWith("/dashboard/files")}
           />
         </div>
+
       </nav>
+
+      {/* Settings – pinned above user info */}
+      <div className="px-2 pb-1">
+        <NavItem
+          href="/dashboard/settings"
+          icon={<Settings className="size-4 shrink-0" />}
+          label="Settings"
+          collapsed={collapsed}
+          active={pathname === "/dashboard/settings"}
+        />
+      </div>
 
       <Separator className="bg-white/10" />
 
@@ -245,6 +264,131 @@ export function Sidebar({ profile, companies }: SidebarProps) {
     </aside>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Company sub-tabs (mirrors company-subnav.tsx)
+// ---------------------------------------------------------------------------
+
+const COMPANY_TABS: { label: string; segment: string; icon: React.ReactNode; accent?: "green" }[] = [
+  { label: "Overview", segment: "", icon: <LayoutDashboard className="size-3.5 shrink-0" /> },
+  { label: "Financials", segment: "/financials", icon: <DollarSign className="size-3.5 shrink-0" /> },
+  { label: "Metrics", segment: "/metrics", icon: <BarChart3 className="size-3.5 shrink-0" /> },
+  { label: "Budget", segment: "/budget", icon: <PiggyBank className="size-3.5 shrink-0" /> },
+  { label: "Projections", segment: "/projections", icon: <TrendingUp className="size-3.5 shrink-0" /> },
+  { label: "Model Builder", segment: "/model-builder", icon: <Wrench className="size-3.5 shrink-0" /> },
+  { label: "Scenarios", segment: "/scenarios", icon: <GitBranch className="size-3.5 shrink-0" /> },
+  { label: "Diligence", segment: "/diligence", icon: <Search className="size-3.5 shrink-0" /> },
+  { label: "Board Deck", segment: "/board-deck", icon: <Presentation className="size-3.5 shrink-0" /> },
+  { label: "Files", segment: "/files", icon: <FolderIcon className="size-3.5 shrink-0" /> },
+  { label: "Settings", segment: "/settings", icon: <SettingsIcon className="size-3.5 shrink-0" /> },
+  { label: "Import Data", segment: "/financials/import", icon: <Upload className="size-3.5 shrink-0" />, accent: "green" },
+]
+
+function CompanyNavItem({
+  company,
+  pathname,
+  collapsed,
+}: {
+  company: CompanyRow
+  pathname: string
+  collapsed: boolean
+}) {
+  const basePath = `/dashboard/companies/${company.id}`
+  const isActive = pathname.startsWith(basePath)
+  const [open, setOpen] = React.useState(isActive)
+
+  // Auto-open when navigating into this company
+  React.useEffect(() => {
+    if (isActive && !open) setOpen(true)
+  }, [isActive])
+
+  // When collapsed, render a simple nav link
+  if (collapsed) {
+    return (
+      <Link
+        href={basePath}
+        title={company.name}
+        className={cn(
+          "group flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors",
+          "border-l-2 border-transparent",
+          isActive
+            ? "border-blue-400 bg-white/10 text-white"
+            : "text-slate-400 hover:bg-white/5 hover:text-white"
+        )}
+      >
+        <Building2 className="size-4 shrink-0" />
+      </Link>
+    )
+  }
+
+  return (
+    <div>
+      {/* Company header — click to toggle dropdown */}
+      <button
+        onClick={() => setOpen((prev) => !prev)}
+        className={cn(
+          "group flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors text-left",
+          "border-l-2 border-transparent",
+          isActive
+            ? "border-blue-400 bg-white/10 text-white"
+            : "text-slate-400 hover:bg-white/5 hover:text-white"
+        )}
+      >
+        <Building2 className="size-4 shrink-0" />
+        <span className="truncate flex-1">{company.name}</span>
+        <ChevronDown
+          className={cn(
+            "size-3.5 shrink-0 text-slate-500 transition-transform duration-200",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+
+      {/* Sub-tabs dropdown */}
+      {open && (
+        <div className="ml-4 border-l border-white/10 pl-2 mt-0.5 mb-1 space-y-0.5">
+          {COMPANY_TABS.map((tab) => {
+            const href = `${basePath}${tab.segment}`
+            const tabActive =
+              tab.segment === ""
+                ? pathname === basePath
+                : pathname.startsWith(href) &&
+                  !COMPANY_TABS.some(
+                    (other) =>
+                      other.segment !== tab.segment &&
+                      other.segment.startsWith(tab.segment) &&
+                      pathname.startsWith(`${basePath}${other.segment}`)
+                  )
+
+            const isGreen = tab.accent === "green"
+
+            return (
+              <Link
+                key={tab.segment}
+                href={href}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                  isGreen
+                    ? tabActive
+                      ? "border border-emerald-400/50 bg-emerald-500/20 text-emerald-300"
+                      : "border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+                    : tabActive
+                      ? "bg-white/10 text-white"
+                      : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                )}
+              >
+                {tab.icon}
+                <span className="truncate">{tab.label}</span>
+              </Link>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 
 interface NavItemProps {
   href: string

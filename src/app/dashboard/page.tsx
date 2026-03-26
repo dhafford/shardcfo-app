@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { KpiGridSkeleton } from "@/components/shared/loading-skeleton";
 import { PortfolioClient, type CompanySummary } from "./page-client";
+import { RecentFiles } from "./recent-files";
+import { fetchAllFiles } from "./actions";
 import type { CompanyRow, MetricRow, ProfileRow } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -158,6 +160,7 @@ export default async function PortfolioDashboardPage() {
   companies = (data ?? []) as CompanyRow[];
 
   const summaries = await buildPortfolioData(companies, supabase);
+  const { files: allFiles } = await fetchAllFiles();
 
   return (
     <div className="p-6 space-y-6">
@@ -180,6 +183,9 @@ export default async function PortfolioDashboardPage() {
 
       {/* Company grid with search/sort/filter */}
       <PortfolioClient companies={summaries} />
+
+      {/* All files across companies */}
+      <RecentFiles files={allFiles} />
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { CompanySubnav } from "@/components/shared/company-subnav"
 import { Badge } from "@/components/ui/badge"
 import type { CompanyRow, CompanyStatus } from "@/lib/supabase/types"
 
@@ -67,9 +66,6 @@ export default async function CompanyLayout({
           </span>
         )}
       </div>
-
-      {/* Section tab navigation */}
-      <CompanySubnav companyId={companyId} />
 
       {/* Scrollable company page content */}
       <div className="flex-1 overflow-y-auto bg-slate-50">
