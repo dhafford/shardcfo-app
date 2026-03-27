@@ -287,7 +287,7 @@ export function AllFilesClient({
         </div>
 
         <div className="flex gap-2 shrink-0">
-          <Select value={companyFilter} onValueChange={setCompanyFilter}>
+          <Select value={companyFilter} onValueChange={(v) => setCompanyFilter(v ?? "all")}>
             <SelectTrigger
               className="w-[180px] h-9 text-sm"
               aria-label="Filter by company"
@@ -304,7 +304,7 @@ export function AllFilesClient({
             </SelectContent>
           </Select>
 
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v ?? "all")}>
             <SelectTrigger
               className="w-[170px] h-9 text-sm"
               aria-label="Filter by category"
