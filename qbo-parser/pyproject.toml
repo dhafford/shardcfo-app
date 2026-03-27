@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qbo-parser"
+version = "0.1.0"
+description = "Parse QuickBooks Online Excel exports into structured data"
+requires-python = ">=3.9"
+dependencies = [
+    "openpyxl>=3.1.0",
+    "pydantic>=2.0",
+    "click>=8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "httpx>=0.24.0",
+]
+api = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.scripts]
+qbo-parse = "qbo_parser.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["qbo_parser*"]
