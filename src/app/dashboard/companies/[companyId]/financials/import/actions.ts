@@ -310,6 +310,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
       // Auto-create account if not found and we have a category from the import
       if (!account && (rawCode || rawName)) {
         const rawCategory = reverseMap["account_type"] ? row[reverseMap["account_type"]] : "";
+        const rawSubcategory = reverseMap["__subcategory__"] ? row[reverseMap["__subcategory__"]] : "";
         const validCategories = [
           "revenue", "cogs", "operating_expense", "other_income",
           "other_expense", "asset", "liability", "equity",
@@ -327,6 +328,7 @@ export async function processImport(input: ProcessImportInput): Promise<ProcessI
               account_number: accountNumber,
               name: accountName,
               category,
+              subcategory: rawSubcategory || null,
               is_active: true,
               display_order: 0,
             })
@@ -455,4 +457,86 @@ export async function createAccounts(
   }
 
   return { created, errors };
+}
+
+// ---------------------------------------------------------------------------
+// Classification override persistence
+// ---------------------------------------------------------------------------
+
+export interface ClassificationOverride {
+  category: string;
+  sectionId: string;
+  statementType: string;
+  updatedAt: string;
+}
+
+export async function loadClassificationOverrides(
+  companyId: string,
+): Promise<Record<string, ClassificationOverride>> {
+  const { supabase } = await requireAuth({ redirect: false });
+
+  const { data } = await supabase
+    .from("companies")
+    .select("metadata")
+    .eq("id", companyId)
+    .single();
+
+  if (!data) return {};
+
+  const metadata = (data as { metadata: Record<string, unknown> }).metadata;
+  const overrides = metadata?.import_overrides as Record<string, ClassificationOverride> | undefined;
+  return overrides ?? {};
+}
+
+export async function saveClassificationOverrides(
+  companyId: string,
+  overrides: Array<{
+    normalizedName: string;
+    category: string;
+    sectionId: string;
+    statementType: string;
+  }>,
+): Promise<{ saved: number; errors: string[] }> {
+  const { supabase } = await requireAuth({ redirect: false });
+  const errors: string[] = [];
+
+  if (overrides.length === 0) return { saved: 0, errors };
+
+  // Fetch current metadata
+  const { data: company } = await supabase
+    .from("companies")
+    .select("metadata")
+    .eq("id", companyId)
+    .single();
+
+  if (!company) {
+    return { saved: 0, errors: ["Company not found."] };
+  }
+
+  const metadata = ((company as { metadata: Record<string, unknown> }).metadata ?? {}) as Record<string, unknown>;
+  const existing = (metadata.import_overrides ?? {}) as Record<string, ClassificationOverride>;
+
+  // Merge new overrides
+  const now = new Date().toISOString();
+  for (const override of overrides) {
+    existing[override.normalizedName] = {
+      category: override.category,
+      sectionId: override.sectionId,
+      statementType: override.statementType,
+      updatedAt: now,
+    };
+  }
+
+  // Save back
+  const updatedMetadata = { ...metadata, import_overrides: existing } as Record<string, unknown>;
+  const { error } = await supabase
+    .from("companies")
+    .update({ metadata: updatedMetadata as never })
+    .eq("id", companyId);
+
+  if (error) {
+    return { saved: 0, errors: [`Failed to save overrides: ${error.message}`] };
+  }
+
+  return { saved: overrides.length, errors };
 }

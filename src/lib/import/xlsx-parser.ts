@@ -16,6 +16,8 @@ export interface ParsedXLSX {
   sheetNames: string[];
   sheets: ParsedSheet[];
   errors: string[];
+  /** Retained workbook for advanced financial statement parsing. */
+  workbook?: XLSX.WorkBook;
 }
 
 function parseSheetData(
@@ -137,15 +139,26 @@ export function parseXLSX(file: File): Promise<ParsedXLSX> {
           sheetNames,
           sheets,
           errors: [],
+          workbook,
         });
       } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to parse Excel file.";
+        // SheetJS throws on password-protected files
+        const isPasswordProtected =
+          message.includes("password") ||
+          message.includes("encrypt") ||
+          message.includes("ECMA-376 Encrypted");
         resolve({
           headers: [],
           rows: [],
           rowCount: 0,
           sheetNames: [],
           sheets: [],
-          errors: [err instanceof Error ? err.message : "Failed to parse Excel file."],
+          errors: [
+            isPasswordProtected
+              ? "This file appears to be password-protected. Please remove the password and re-upload."
+              : message,
+          ],
         });
       }
     };

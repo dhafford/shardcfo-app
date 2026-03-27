@@ -797,6 +797,88 @@ export type Database = {
           },
         ]
       }
+      research_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "research_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      research_iterations: {
+        Row: {
+          id: string
+          session_id: string
+          iteration_num: number
+          user_prompt: string
+          generated_prompt: string | null
+          result_markdown: string | null
+          input_tokens: number | null
+          output_tokens: number | null
+          latency_ms: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          session_id: string
+          iteration_num: number
+          user_prompt: string
+          generated_prompt?: string | null
+          result_markdown?: string | null
+          input_tokens?: number | null
+          output_tokens?: number | null
+          latency_ms?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          session_id?: string
+          iteration_num?: number
+          user_prompt?: string
+          generated_prompt?: string | null
+          result_markdown?: string | null
+          input_tokens?: number | null
+          output_tokens?: number | null
+          latency_ms?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "research_iterations_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "research_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -895,6 +977,51 @@ export type DataRoomDocumentRow = Database['public']['Tables']['data_room_docume
 export type DDFindingRow = Database['public']['Tables']['dd_findings']['Row']
 export type QoEAdjustmentRow = Database['public']['Tables']['qoe_adjustments']['Row']
 export type CompanyFileRow = Database['public']['Tables']['company_files']['Row']
+
+// Research tables (pending Supabase type regeneration — standalone definitions)
+export interface ResearchSessionRow {
+  id: string
+  user_id: string
+  title: string
+  status: 'active' | 'completed' | 'archived'
+  created_at: string
+  updated_at: string
+}
+
+export interface ResearchSessionInsert {
+  id?: string
+  user_id: string
+  title: string
+  status?: 'active' | 'completed' | 'archived'
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ResearchIterationRow {
+  id: string
+  session_id: string
+  iteration_num: number
+  user_prompt: string
+  generated_prompt: string | null
+  result_markdown: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  latency_ms: number | null
+  created_at: string
+}
+
+export interface ResearchIterationInsert {
+  id?: string
+  session_id: string
+  iteration_num: number
+  user_prompt: string
+  generated_prompt?: string | null
+  result_markdown?: string | null
+  input_tokens?: number | null
+  output_tokens?: number | null
+  latency_ms?: number | null
+  created_at?: string
+}
 
 // -------------------------------------------------------------------
 // Insert type aliases

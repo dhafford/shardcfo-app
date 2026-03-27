@@ -30,13 +30,16 @@ import {
   Loader2,
 } from "lucide-react";
 import { parseCSV } from "@/lib/import/csv-parser";
-import { parseXLSX, type ParsedSheet } from "@/lib/import/xlsx-parser";
+import { parseXLSX, type ParsedSheet, type ParsedXLSX } from "@/lib/import/xlsx-parser";
 import { detectColumns } from "@/lib/import/csv-parser";
 import { validateData } from "@/lib/import/csv-parser";
 import { parseQuickBooksReport } from "@/lib/import/quickbooks-parser";
 import { parseXeroReport } from "@/lib/import/xero-parser";
-import { organizeIntoTemplate, TEMPLATE_TO_DB_CATEGORY, type ReviewLineItem, type OrganizedStatement } from "@/lib/import/industry-templates";
+import { organizeIntoTemplate, organizeMultiStatement, TEMPLATE_TO_DB_CATEGORY, type ReviewLineItem, type OrganizedStatement } from "@/lib/import/industry-templates";
+import { classifyAllSheets, STATEMENT_TYPE_LABELS, type SheetClassification, type StatementType } from "@/lib/import/statement-detection";
+import { parseAllFinancialSheets } from "@/lib/import/financial-layout-parser";
 import { ImportTemplateReview } from "@/components/financials/import-template-review";
+import { loadClassificationOverrides, saveClassificationOverrides } from "@/app/dashboard/companies/[companyId]/financials/import/actions";
 import type { AccountRow } from "@/lib/supabase/types";
 
 // ---------------------------------------------------------------------------
@@ -64,6 +67,8 @@ interface ParsedFile {
   rowCount: number;
   errors: string[];
   sheets?: ParsedSheet[];
+  /** Retained for financial layout parsing */
+  xlsxResult?: ParsedXLSX;
 }
 
 interface ColumnMapping {
@@ -229,6 +234,8 @@ export function DataImportWizard({
   const [organizedData, setOrganizedData] = React.useState<OrganizedStatement | null>(null);
   const [approvedItems, setApprovedItems] = React.useState<ReviewLineItem[] | null>(null);
   const [activeSheetTab, setActiveSheetTab] = React.useState<string>("__all__");
+  const [sheetClassifications, setSheetClassifications] = React.useState<SheetClassification[]>([]);
+  const [isMultiStatement, setIsMultiStatement] = React.useState(false);
   const [importState, setImportState] = React.useState<{
     running: boolean;
     progress: number;
@@ -260,7 +267,21 @@ export function DataImportWizard({
         parsed = { name: file.name, ...result };
       } else {
         const result = await parseXLSX(file);
-        parsed = { name: file.name, headers: result.headers, rows: result.rows, rowCount: result.rowCount, errors: result.errors, sheets: result.sheets };
+        parsed = { name: file.name, headers: result.headers, rows: result.rows, rowCount: result.rowCount, errors: result.errors, sheets: result.sheets, xlsxResult: result };
+
+        // Classify sheets for multi-statement detection
+        if (result.sheets.length > 0) {
+          const classifications = classifyAllSheets(result.sheets);
+          setSheetClassifications(classifications);
+
+          // Detect multi-statement: >1 distinct financial statement types
+          const financialTypes = new Set(
+            classifications
+              .filter((c) => !["supporting_schedule", "unknown"].includes(c.detectedType))
+              .map((c) => c.detectedType)
+          );
+          setIsMultiStatement(financialTypes.size > 1);
+        }
       }
 
       if (parsed.errors.length > 0 && parsed.rowCount === 0) {
@@ -344,11 +365,94 @@ export function DataImportWizard({
     }
   };
 
+  const goToMultiStatementReview = async () => {
+    if (!parsedFile?.xlsxResult?.workbook) return;
+
+    const financialSheets = parseAllFinancialSheets(
+      parsedFile.xlsxResult.workbook,
+      sheetClassifications,
+    );
+
+    if (financialSheets.length === 0) {
+      setValidationErrors(["No financial data found in any sheet."]);
+      return;
+    }
+
+    // Load any saved classification overrides from previous imports
+    const overrides = await loadClassificationOverrides(companyId);
+
+    const organized = organizeMultiStatement({
+      sheets: financialSheets.map((sheet) => ({
+        sheetName: sheet.sheetName,
+        statementType: sheet.statementType,
+        periods: sheet.periods,
+        lineItems: sheet.lineItems.map((item) => ({
+          label: item.label,
+          accountCode: item.accountCode,
+          sectionContext: item.sectionContext,
+          amounts: item.amounts,
+          rowIndex: item.rowIndex,
+        })),
+      })),
+      industry,
+      overrides,
+    });
+
+    setOrganizedData(organized);
+    setStep("review");
+  };
+
   const handleReviewApprove = (items: ReviewLineItem[]) => {
     setApprovedItems(items);
 
-    // Update rows with user-approved categories before import
-    if (parsedFile) {
+    if (isMultiStatement) {
+      // Multi-statement mode: convert ReviewLineItems to flat rows for processImport
+      const flatRows: Record<string, string>[] = [];
+
+      for (const item of items) {
+        const dbCategory = TEMPLATE_TO_DB_CATEGORY[item.category] || item.category;
+        const templateCategory = item.category; // granular for subcategory
+
+        for (const [date, amount] of Object.entries(item.periodAmounts)) {
+          flatRows.push({
+            account_name: item.accountName,
+            account_code: item.accountCode,
+            account_type: dbCategory,
+            __subcategory__: templateCategory,
+            amount: String(amount),
+            date,
+          });
+        }
+      }
+
+      const multiMapping: ColumnMapping = {
+        account_name: "account_name",
+        account_code: "account_code",
+        account_type: "account_type",
+        __subcategory__: "__subcategory__",
+        amount: "amount",
+        date: "date",
+      };
+
+      setColumnMapping(multiMapping);
+      setParsedFile((prev) => prev ? { ...prev, rows: flatRows, rowCount: flatRows.length } : prev);
+
+      // Save user-reassigned items as overrides for future imports
+      const reassigned = items
+        .filter((item) => item.confidence === "high" && item.sectionId)
+        .map((item) => ({
+          normalizedName: (item.accountName || item.accountCode).toLowerCase().replace(/\s+/g, " "),
+          category: item.category,
+          sectionId: item.sectionId,
+          statementType: item.statementType || "income_statement",
+        }));
+      if (reassigned.length > 0) {
+        saveClassificationOverrides(companyId, reassigned).catch(() => {
+          // Non-blocking — overrides are a convenience, not critical
+        });
+      }
+    } else if (parsedFile) {
+      // Standard single-sheet mode: update rows with approved categories
       const reverseMap: Record<string, string> = {};
       for (const [header, field] of Object.entries(columnMapping)) {
         if (field) reverseMap[field] = header;
@@ -452,6 +556,8 @@ export function DataImportWizard({
     setParseError(null);
     setImportSource("generic");
     setActiveSheetTab("__all__");
+    setSheetClassifications([]);
+    setIsMultiStatement(false);
   };
 
   // ---------------------------------------------------------------------------
@@ -598,24 +704,38 @@ export function DataImportWizard({
                     ({parsedFile.rowCount.toLocaleString()})
                   </span>
                 </button>
-                {sheets.map((sheet) => (
-                  <button
-                    key={sheet.name}
-                    type="button"
-                    onClick={() => setActiveSheetTab(sheet.name)}
-                    className={cn(
-                      "px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors",
-                      activeSheetTab === sheet.name
-                        ? "border-blue-600 text-blue-600"
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-slate-300"
-                    )}
-                  >
-                    {sheet.name}
-                    <span className="ml-1.5 text-xs text-muted-foreground">
-                      ({sheet.rowCount.toLocaleString()})
-                    </span>
-                  </button>
-                ))}
+                {sheets.map((sheet) => {
+                  const classification = sheetClassifications.find((c) => c.sheetName === sheet.name);
+                  const isSkipped = classification?.detectedType === "supporting_schedule";
+                  return (
+                    <button
+                      key={sheet.name}
+                      type="button"
+                      onClick={() => setActiveSheetTab(sheet.name)}
+                      className={cn(
+                        "px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5",
+                        activeSheetTab === sheet.name
+                          ? "border-blue-600 text-blue-600"
+                          : isSkipped
+                          ? "border-transparent text-muted-foreground/50"
+                          : "border-transparent text-muted-foreground hover:text-foreground hover:border-slate-300"
+                      )}
+                    >
+                      {sheet.name}
+                      <span className="text-xs text-muted-foreground">
+                        ({sheet.rowCount.toLocaleString()})
+                      </span>
+                      {classification && classification.detectedType !== "unknown" && (
+                        <Badge
+                          variant={isSkipped ? "outline" : "secondary"}
+                          className={cn("text-[10px] py-0 px-1.5", isSkipped && "opacity-50")}
+                        >
+                          {STATEMENT_TYPE_LABELS[classification.detectedType]}
+                        </Badge>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -666,14 +786,34 @@ export function DataImportWizard({
               </Table>
             </div>
 
+            {isMultiStatement && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+                <p className="font-medium">Multi-statement file detected</p>
+                <p className="mt-1 text-blue-600">
+                  {sheetClassifications
+                    .filter((c) => !["supporting_schedule", "unknown"].includes(c.detectedType))
+                    .map((c) => STATEMENT_TYPE_LABELS[c.detectedType])
+                    .join(", ")}{" "}
+                  found. Period columns and categories will be detected automatically.
+                </p>
+              </div>
+            )}
+
             <div className="flex justify-between pt-2">
               <Button variant="outline" onClick={reset}>
                 Back
               </Button>
-              <Button onClick={goToMapping}>
-                Continue to Mapping
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
+              {isMultiStatement ? (
+                <Button onClick={goToMultiStatementReview}>
+                  Continue to Review
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              ) : (
+                <Button onClick={goToMapping}>
+                  Continue to Mapping
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              )}
             </div>
           </div>
         );
@@ -770,7 +910,7 @@ export function DataImportWizard({
         <ImportTemplateReview
           organized={organizedData}
           onApprove={handleReviewApprove}
-          onBack={() => setStep("mapping")}
+          onBack={() => setStep(isMultiStatement ? "preview" : "mapping")}
         />
       )}
 

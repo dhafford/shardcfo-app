@@ -14,6 +14,7 @@ import {
   FileText,
   Smartphone,
   Zap,
+  BookOpen,
   FolderOpen,
   LayoutDashboard,
   DollarSign,
@@ -167,6 +168,22 @@ export function Sidebar({ profile, companies }: SidebarProps) {
             label="Forge"
             collapsed={collapsed}
             active={pathname.startsWith("/dashboard/forge")}
+          />
+        </div>
+
+        {/* Research */}
+        <div className="mt-3">
+          {!collapsed && (
+            <p className="mb-1 px-3 text-[0.625rem] font-semibold uppercase tracking-widest text-slate-500">
+              Research
+            </p>
+          )}
+          <NavItem
+            href="/dashboard/research"
+            icon={<BookOpen className="size-4 shrink-0" />}
+            label="Research"
+            collapsed={collapsed}
+            active={pathname.startsWith("/dashboard/research")}
           />
         </div>
 
