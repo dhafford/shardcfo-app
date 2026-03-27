@@ -466,7 +466,7 @@ export async function createAccounts(
 export interface ClassificationOverride {
   category: string;
   sectionId: string;
-  statementType: string;
+  statementType: "income_statement" | "balance_sheet" | "cash_flow" | "equity" | "supporting_schedule" | "unknown";
   updatedAt: string;
 }
 
