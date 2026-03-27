@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { format, subMonths, addMonths, startOfMonth } from "date-fns";
-import { Upload, FileText, Settings, PlusCircle } from "lucide-react";
+import { FileText, Settings, PlusCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { KpiCard } from "@/components/shared/kpi-card";
 import { KpiGridSkeleton, PageSkeleton } from "@/components/shared/loading-skeleton";
@@ -440,12 +440,6 @@ export default async function CompanyDashboardPage({
           <Button variant="outline" size="sm" className="gap-1.5">
             <PlusCircle className="w-4 h-4" />
             Update Metrics
-          </Button>
-        </Link>
-        <Link href={`/dashboard/companies/${companyId}/settings`}>
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <Upload className="w-4 h-4" />
-            Import Data
           </Button>
         </Link>
         <Link href={`/dashboard/companies/${companyId}/board-deck`}>

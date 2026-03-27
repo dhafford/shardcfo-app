@@ -17,6 +17,8 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Loader2, ArrowLeft, Play, Trash2, Download } from "lucide-react";
+import { toast } from "sonner";
+import { parseAuditHeaders } from "@/components/audit-score-badge";
 import Link from "next/link";
 import {
   LineChart,
@@ -253,6 +255,9 @@ export default function ScenarioEditorPage() {
         }),
       });
       if (!res.ok) throw new Error("Export failed");
+
+      const audit = parseAuditHeaders(res);
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -260,8 +265,18 @@ export default function ScenarioEditorPage() {
       a.download = `Scenario ${scenarioId.substring(0, 8)}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
+
+      if (audit) {
+        if (audit.sectionAPass && audit.pct >= 90) {
+          toast.success(`Banker Bible Audit: ${audit.pct}%`);
+        } else if (audit.sectionAPass) {
+          toast.warning(`Banker Bible Audit: ${audit.pct}% — ${audit.failures.length} items need attention`);
+        } else {
+          toast.error(`Banker Bible Audit: Section A FAILED`);
+        }
+      }
     } catch {
-      // Could add toast
+      toast.error("Export failed");
     } finally {
       setIsExporting(false);
     }

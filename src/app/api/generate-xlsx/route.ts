@@ -114,6 +114,19 @@ export async function POST(request: NextRequest) {
       console.error("[BANKER AUDIT] Audit failed:", auditErr);
     }
 
+    // Serialize audit details for frontend (compact: only failures + summary)
+    const auditDetailsJson = auditReport
+      ? JSON.stringify({
+          passed: auditReport.totalPassed,
+          total: auditReport.total,
+          pct: Math.round(auditReport.scorePct),
+          sectionAPass: auditReport.sectionAPass,
+          failures: auditReport.results
+            .filter((r) => !r.passed)
+            .map((r) => ({ id: r.checkId, s: r.section, g: r.gating, d: r.description, t: r.details })),
+        })
+      : "";
+
     return new NextResponse(buffer as unknown as BodyInit, {
       headers: {
         "Content-Type":
@@ -123,6 +136,7 @@ export async function POST(request: NextRequest) {
         "X-Banker-Audit-Score": auditReport ? `${auditReport.totalPassed}/${auditReport.total}` : "N/A",
         "X-Banker-Audit-Section-A": auditReport ? (auditReport.sectionAPass ? "PASS" : "FAIL") : "N/A",
         "X-Banker-Audit-Pct": auditReport ? `${Math.round(auditReport.scorePct)}` : "0",
+        "X-Banker-Audit-Details": auditDetailsJson,
       },
     });
   } catch (error) {

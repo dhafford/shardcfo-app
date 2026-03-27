@@ -30,7 +30,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { parseCSV } from "@/lib/import/csv-parser";
-import { parseXLSX } from "@/lib/import/xlsx-parser";
+import { parseXLSX, type ParsedSheet } from "@/lib/import/xlsx-parser";
 import { detectColumns } from "@/lib/import/csv-parser";
 import { validateData } from "@/lib/import/csv-parser";
 import { parseQuickBooksReport } from "@/lib/import/quickbooks-parser";
@@ -63,6 +63,7 @@ interface ParsedFile {
   rows: Record<string, string>[];
   rowCount: number;
   errors: string[];
+  sheets?: ParsedSheet[];
 }
 
 interface ColumnMapping {
@@ -227,6 +228,7 @@ export function DataImportWizard({
   const [validationWarnings, setValidationWarnings] = React.useState<string[]>([]);
   const [organizedData, setOrganizedData] = React.useState<OrganizedStatement | null>(null);
   const [approvedItems, setApprovedItems] = React.useState<ReviewLineItem[] | null>(null);
+  const [activeSheetTab, setActiveSheetTab] = React.useState<string>("__all__");
   const [importState, setImportState] = React.useState<{
     running: boolean;
     progress: number;
@@ -258,7 +260,7 @@ export function DataImportWizard({
         parsed = { name: file.name, ...result };
       } else {
         const result = await parseXLSX(file);
-        parsed = { name: file.name, ...result };
+        parsed = { name: file.name, headers: result.headers, rows: result.rows, rowCount: result.rowCount, errors: result.errors, sheets: result.sheets };
       }
 
       if (parsed.errors.length > 0 && parsed.rowCount === 0) {
@@ -449,6 +451,7 @@ export function DataImportWizard({
     setImportState({ running: false, progress: 0, result: null });
     setParseError(null);
     setImportSource("generic");
+    setActiveSheetTab("__all__");
   };
 
   // ---------------------------------------------------------------------------
@@ -528,82 +531,153 @@ export function DataImportWizard({
       )}
 
       {/* Step 2: Preview */}
-      {step === "preview" && parsedFile && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-md border bg-slate-50 px-3 py-1.5">
-              <FileSpreadsheet className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-medium">{parsedFile.name}</span>
-              <Badge variant="secondary">{parsedFile.rowCount.toLocaleString()} rows</Badge>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={reset}
-              className="ml-auto"
-            >
-              <X className="w-3.5 h-3.5 mr-1" />
-              Remove
-            </Button>
-          </div>
+      {step === "preview" && parsedFile && (() => {
+        const sheets = parsedFile.sheets ?? [];
+        const hasMultipleSheets = sheets.length > 1;
 
-          {parsedFile.errors.length > 0 && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 space-y-1">
-              <p className="font-medium">Parse warnings:</p>
-              {parsedFile.errors.map((e, i) => <p key={i}>{e}</p>)}
-            </div>
-          )}
+        // Determine which data to show based on active tab
+        let displayHeaders: string[];
+        let displayRows: Record<string, string>[];
+        let displayRowCount: number;
 
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50">
-                  <TableHead className="text-xs font-medium text-muted-foreground w-10">#</TableHead>
-                  {parsedFile.headers.map((h) => (
-                    <TableHead key={h} className="text-xs font-medium">
-                      {h}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {parsedFile.rows.slice(0, 20).map((row, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
-                    {parsedFile.headers.map((h) => (
-                      <TableCell key={h} className="text-sm max-w-[140px] truncate">
-                        {row[h] || (
-                          <span className="text-muted-foreground/50 text-xs italic">empty</span>
-                        )}
-                      </TableCell>
+        if (!hasMultipleSheets || activeSheetTab === "__all__") {
+          displayHeaders = parsedFile.headers;
+          displayRows = parsedFile.rows;
+          displayRowCount = parsedFile.rowCount;
+        } else {
+          const sheet = sheets.find((s) => s.name === activeSheetTab);
+          displayHeaders = sheet?.headers ?? parsedFile.headers;
+          displayRows = sheet?.rows ?? parsedFile.rows;
+          displayRowCount = sheet?.rowCount ?? parsedFile.rowCount;
+        }
+
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 rounded-md border bg-slate-50 px-3 py-1.5">
+                <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-medium">{parsedFile.name}</span>
+                <Badge variant="secondary">{parsedFile.rowCount.toLocaleString()} rows</Badge>
+                {hasMultipleSheets && (
+                  <Badge variant="outline">{sheets.length} sheets</Badge>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={reset}
+                className="ml-auto"
+              >
+                <X className="w-3.5 h-3.5 mr-1" />
+                Remove
+              </Button>
+            </div>
+
+            {parsedFile.errors.length > 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 space-y-1">
+                <p className="font-medium">Parse warnings:</p>
+                {parsedFile.errors.map((e, i) => <p key={i}>{e}</p>)}
+              </div>
+            )}
+
+            {/* Sheet tabs */}
+            {hasMultipleSheets && (
+              <div className="flex items-center gap-1 border-b">
+                <button
+                  type="button"
+                  onClick={() => setActiveSheetTab("__all__")}
+                  className={cn(
+                    "px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                    activeSheetTab === "__all__"
+                      ? "border-blue-600 text-blue-600"
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-slate-300"
+                  )}
+                >
+                  All Sheets
+                  <span className="ml-1.5 text-xs text-muted-foreground">
+                    ({parsedFile.rowCount.toLocaleString()})
+                  </span>
+                </button>
+                {sheets.map((sheet) => (
+                  <button
+                    key={sheet.name}
+                    type="button"
+                    onClick={() => setActiveSheetTab(sheet.name)}
+                    className={cn(
+                      "px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                      activeSheetTab === sheet.name
+                        ? "border-blue-600 text-blue-600"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-slate-300"
+                    )}
+                  >
+                    {sheet.name}
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      ({sheet.rowCount.toLocaleString()})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50">
+                    <TableHead className="text-xs font-medium text-muted-foreground w-10">#</TableHead>
+                    {hasMultipleSheets && activeSheetTab === "__all__" && (
+                      <TableHead className="text-xs font-medium text-blue-600">Sheet</TableHead>
+                    )}
+                    {displayHeaders.map((h) => (
+                      <TableHead key={h} className="text-xs font-medium">
+                        {h}
+                      </TableHead>
                     ))}
                   </TableRow>
-                ))}
-                {parsedFile.rowCount > 20 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={parsedFile.headers.length + 1}
-                      className="text-center text-xs text-muted-foreground py-3"
-                    >
-                      ... and {(parsedFile.rowCount - 20).toLocaleString()} more rows
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {displayRows.slice(0, 50).map((row, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
+                      {hasMultipleSheets && activeSheetTab === "__all__" && (
+                        <TableCell className="text-xs font-medium text-blue-600 whitespace-nowrap">
+                          {row["__sheet__"] || "—"}
+                        </TableCell>
+                      )}
+                      {displayHeaders.map((h) => (
+                        <TableCell key={h} className="text-sm max-w-[140px] truncate">
+                          {row[h] || (
+                            <span className="text-muted-foreground/50 text-xs italic">empty</span>
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                  {displayRowCount > 50 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={displayHeaders.length + (hasMultipleSheets && activeSheetTab === "__all__" ? 2 : 1)}
+                        className="text-center text-xs text-muted-foreground py-3"
+                      >
+                        ... and {(displayRowCount - 50).toLocaleString()} more rows
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
 
-          <div className="flex justify-between pt-2">
-            <Button variant="outline" onClick={reset}>
-              Back
-            </Button>
-            <Button onClick={goToMapping}>
-              Continue to Mapping
-              <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
+            <div className="flex justify-between pt-2">
+              <Button variant="outline" onClick={reset}>
+                Back
+              </Button>
+              <Button onClick={goToMapping}>
+                Continue to Mapping
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Step 3: Account Mapping */}
       {step === "mapping" && parsedFile && (

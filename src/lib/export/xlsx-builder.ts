@@ -563,6 +563,7 @@ export async function buildProjectionWorkbook(
   writeAssumpRow("ga",     "G&A %",                   assumptions.gaPercent.slice(0, projYears),                    "percent")
   writeAssumpRow("sbc",    "SBC %",                   assumptions.sbcPercent.slice(0, projYears),                   "percent")
   writeAssumpRow("da",     "D&A %",                   assumptions.daPercent.slice(0, projYears),                    "percent")
+  writeAssumpRow("daSplitPPE", "D&A Split — PPE Share", Array(projYears).fill(0.4),                                "percent")
   writeAssumpRow("tax",    "Tax Rate",                 assumptions.taxRate.slice(0, projYears),                      "percent")
 
   writeAssumpBlank()
@@ -1197,29 +1198,54 @@ export async function buildProjectionWorkbook(
       assumpHdr.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${COLOR_SECTION_BG}` } }
     }
 
+    // Track input row numbers for formula references
+    const revInputRows: Record<string, number> = {}
+
     if (meta.inputs.length === 0 && methodId === "growth_rate") {
-      // Simple growth rate: show per-stream growth rates
+      // Per-stream: base revenue (seed) + growth rate rows
       for (const stream of assumptions.revenueStreams) {
-        const row = revSheet.addRow([`${stream.name} — YoY Growth`, ...stream.growthRates.slice(0, projYears)])
+        const lastHistStreamRev = historicals.length > 0
+          ? (historicals[historicals.length - 1].revenueByStream[stream.name] ?? 0)
+          : 0
+        // Base Revenue row (yellow editable seed — blue font = input per Banker Bible B1)
+        const baseRow = revSheet.addRow([
+          `${stream.name} — Base Revenue`,
+          ...Array(projYears).fill(lastHistStreamRev),
+        ])
+        revInputRows[`base_${stream.name}`] = revSheet.rowCount
         for (let c = 2; c <= projYears + 1; c++) {
-          const cell = row.getCell(c)
-          applyPercentFormat(cell)
-          cell.font = { size: 10, name: "Calibri" }
+          const cell = baseRow.getCell(c)
+          applyCurrencyFormat(cell)
+          cell.font = { size: 10, name: "Calibri", color: { argb: "FF0000CC" } }
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${COLOR_ASSUMP_BG}` } }
         }
-        row.getCell(1).font = { size: 10, name: "Calibri" }
+        baseRow.getCell(1).font = { size: 10, name: "Calibri" }
+        // Growth Rate row
+        const growthRow = revSheet.addRow([
+          `${stream.name} — YoY Growth`,
+          ...stream.growthRates.slice(0, projYears),
+        ])
+        revInputRows[`growth_${stream.name}`] = revSheet.rowCount
+        for (let c = 2; c <= projYears + 1; c++) {
+          const cell = growthRow.getCell(c)
+          applyPercentFormat(cell)
+          cell.font = { size: 10, name: "Calibri", color: { argb: "FF0000CC" } }
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${COLOR_ASSUMP_BG}` } }
+        }
+        growthRow.getCell(1).font = { size: 10, name: "Calibri" }
       }
     } else {
       // Methodology-specific inputs (same value seeded across all years)
       for (const inp of meta.inputs) {
         const val = inputs[inp.key] ?? 0
         const row = revSheet.addRow([inp.label, ...Array(projYears).fill(val)])
+        revInputRows[inp.key] = revSheet.rowCount
         for (let c = 2; c <= projYears + 1; c++) {
           const cell = row.getCell(c)
           if (inp.type === "currency") applyCurrencyFormat(cell)
           else if (inp.type === "percent") applyPercentFormat(cell)
           else cell.numFmt = "#,##0.0"
-          cell.font = { size: 10, name: "Calibri" }
+          cell.font = { size: 10, name: "Calibri", color: { argb: "FF0000CC" } }
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${COLOR_ASSUMP_BG}` } }
         }
         row.getCell(1).font = { size: 10, name: "Calibri" }
@@ -1240,21 +1266,40 @@ export async function buildProjectionWorkbook(
     let totalRevRowOnSheet: number
 
     if (methodId === "growth_rate") {
-      // Per-stream revenue rows
+      // Per-stream revenue rows — FORMULA: Year1 = Base*(1+Growth), Year2+ = Prior*(1+Growth)
       const streamStartRow = revSheet.rowCount + 1
       for (let s = 0; s < numStreams; s++) {
         const stream = assumptions.revenueStreams[s]
         const projStreamVals = projected.map((p) => p.revenueByStream[stream.name] ?? 0)
-        const row = revSheet.addRow([stream.name, ...projStreamVals])
+        const row = revSheet.addRow([stream.name, ...Array(projYears).fill(null)])
+        const revStreamRow = revSheet.rowCount
+        const baseRowNum = revInputRows[`base_${stream.name}`]
+        const growthRowNum = revInputRows[`growth_${stream.name}`]
         for (let c = 2; c <= projYears + 1; c++) {
-          applyCurrencyFormat(row.getCell(c))
-          row.getCell(c).font = { size: 10, name: "Calibri" }
-          row.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${COLOR_PROJ_BG}` } }
+          const col = colLetter(c)
+          const cell = row.getCell(c)
+          if (c === 2) {
+            // First projected year: Base Revenue × (1 + Growth Rate)
+            cell.value = {
+              formula: `${col}${baseRowNum}*(1+${col}${growthRowNum})`,
+              result: projStreamVals[0],
+            }
+          } else {
+            // Subsequent years: Prior Year Revenue × (1 + Growth Rate)
+            const priorCol = colLetter(c - 1)
+            cell.value = {
+              formula: `${priorCol}${revStreamRow}*(1+${col}${growthRowNum})`,
+              result: projStreamVals[c - 2] ?? 0,
+            }
+          }
+          applyCurrencyFormat(cell)
+          cell.font = { size: 10, name: "Calibri" }
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${COLOR_PROJ_BG}` } }
         }
         row.getCell(1).font = { size: 10, name: "Calibri" }
       }
       // Total Revenue row — SUM of stream rows
-      const totalRow = revSheet.addRow(["Total Revenue", ...projected.map((p) => p.totalRevenue)])
+      const totalRow = revSheet.addRow(["Total Revenue", ...Array(projYears).fill(null)])
       totalRevRowOnSheet = revSheet.rowCount
       for (let c = 2; c <= projYears + 1; c++) {
         const cell = totalRow.getCell(c)
@@ -1270,29 +1315,45 @@ export async function buildProjectionWorkbook(
       totalRow.getCell(1).font = { bold: true, size: 10, name: "Calibri" }
       applyTotalStyle(totalRow, 2)
     } else {
-      // Other methodologies: formula note + revenue output row
+      // Other methodologies: formula note + LIVE FORMULA revenue output row
       const formulaNote = revSheet.addRow([getMethodFormulaNote(methodId)])
       formulaNote.getCell(1).font = { size: 9, italic: true, color: { argb: "FF64748B" }, name: "Calibri" }
 
-      const revRow = revSheet.addRow(["Revenue from This Method", ...projected.map((p) => p.totalRevenue)])
+      const revRow = revSheet.addRow(["Revenue from This Method", ...Array(projYears).fill(null)])
       totalRevRowOnSheet = revSheet.rowCount
       for (let c = 2; c <= projYears + 1; c++) {
-        applyCurrencyFormat(revRow.getCell(c))
-        revRow.getCell(c).font = { bold: true, size: 10, name: "Calibri" }
-        revRow.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${COLOR_PROJ_BG}` } }
+        const col = colLetter(c)
+        const cell = revRow.getCell(c)
+        const formula = buildMethodRevenueFormula(methodId, revInputRows, col)
+        cell.value = { formula, result: projected[c - 2]?.totalRevenue ?? 0 }
+        applyCurrencyFormat(cell)
+        cell.font = { bold: true, size: 10, name: "Calibri" }
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${COLOR_PROJ_BG}` } }
       }
       revRow.getCell(1).font = { bold: true, size: 10, name: "Calibri" }
       applyTotalStyle(revRow, 2)
     }
 
-    // YoY growth row
+    // YoY growth row — FORMULA
     revSheet.addRow([])
-    const growthRow = revSheet.addRow(["YoY Revenue Growth", ...projected.map((p) => p.revenueGrowth)])
+    const yoyGrowthRow = revSheet.addRow(["YoY Revenue Growth", ...Array(projYears).fill(null)])
     for (let c = 2; c <= projYears + 1; c++) {
-      applyPercentFormat(growthRow.getCell(c))
-      growthRow.getCell(c).font = { size: 10, name: "Calibri" }
+      const col = colLetter(c)
+      const cell = yoyGrowthRow.getCell(c)
+      if (c === 2) {
+        // First year: no prior on this tab
+        cell.value = { formula: "0", result: projected[0]?.revenueGrowth ?? 0 }
+      } else {
+        const priorCol = colLetter(c - 1)
+        cell.value = {
+          formula: `IF(${priorCol}${totalRevRowOnSheet}=0,0,(${col}${totalRevRowOnSheet}-${priorCol}${totalRevRowOnSheet})/${priorCol}${totalRevRowOnSheet})`,
+          result: projected[c - 2]?.revenueGrowth ?? 0,
+        }
+      }
+      applyPercentFormat(cell)
+      cell.font = { size: 10, name: "Calibri" }
     }
-    growthRow.getCell(1).font = { size: 10, name: "Calibri" }
+    yoyGrowthRow.getCell(1).font = { size: 10, name: "Calibri" }
 
     // Note
     revSheet.addRow([])
@@ -2212,7 +2273,7 @@ export async function buildProjectionWorkbook(
       projected.map((p) => p.ppeNet),
       "currency",
       (_i, col, aCol, priorCol) =>
-        `MAX(0,${priorCol}${bsRows.get("ppe")}+'Income Statement'!${col}${revRow}*'Basic Assumptions'!${aCol}${assumpRows.get("capex")}-'Income Statement'!${col}${daRow}*0.4)`,
+        `MAX(0,${priorCol}${bsRows.get("ppe")}+'Income Statement'!${col}${revRow}*'Basic Assumptions'!${aCol}${assumpRows.get("capex")}-'Income Statement'!${col}${daRow}*'Basic Assumptions'!${aCol}${assumpRows.get("daSplitPPE")})`,
       { indent: 1 }
     )
   }
@@ -2245,7 +2306,7 @@ export async function buildProjectionWorkbook(
       projected.map((p) => p.capSoftwareNet),
       "currency",
       (_i, col, aCol, priorCol) =>
-        `MAX(0,${priorCol}${bsRows.get("capsw")}+'Income Statement'!${col}${revRow}*'Basic Assumptions'!${aCol}${assumpRows.get("capsw")}-'Income Statement'!${col}${daRow}*0.6)`,
+        `MAX(0,${priorCol}${bsRows.get("capsw")}+'Income Statement'!${col}${revRow}*'Basic Assumptions'!${aCol}${assumpRows.get("capsw")}-'Income Statement'!${col}${daRow}*(1-'Basic Assumptions'!${aCol}${assumpRows.get("daSplitPPE")}))`,
       { indent: 1 }
     )
   }
@@ -2529,6 +2590,79 @@ export async function buildProjectionWorkbook(
       (_i, col) => `${col}${taRow}-${col}${tleRow}`,
       { indent: 1 }
     )
+  }
+
+  // =========================================================================
+  // PATCH: BS Historical Seed Values
+  // Populate the last historical column with estimated seed values so that
+  // carry-forward formulas referencing prior-period have proper anchors.
+  // Without this, all carry-forward BS items (PPE, goodwill, debt, equity)
+  // reference empty cells on recalculation → D1 propagation test failure.
+  // =========================================================================
+
+  if (historicals.length > 0) {
+    const lastHistCol = 1 + histCount
+    const lastHist = historicals[historicals.length - 1]
+    const priorRev = lastHist.revenue
+    const priorCOGS = lastHist.cogs
+
+    // Compute seeds (matching projection engine bootstrap logic)
+    const bsSeeds: Record<string, number> = {}
+    bsSeeds.ar = priorRev * 35 / 365
+    bsSeeds.prepaid = priorRev * 0.03
+    bsSeeds.ppe = priorRev * 0.05
+    bsSeeds.capsw = priorRev * 0.08
+    bsSeeds.sti = 0
+    bsSeeds.goodwill = 0
+    bsSeeds.intangibles = 0
+    bsSeeds.onca = 0
+    bsSeeds.ap = priorCOGS * 30 / 365
+    bsSeeds.accrued = priorRev * 0.06
+    bsSeeds.defrevC = priorRev * 0.08
+    bsSeeds.defrevNC = priorRev * 0.02
+    bsSeeds.currentDebt = 0
+    bsSeeds.ocl = priorRev * 0.02
+    bsSeeds.ltd = 0
+    bsSeeds.oncl = 0
+    bsSeeds.cs = 0
+    bsSeeds.apic = 0
+    bsSeeds.ts = 0
+
+    // Compute totals and RE as plug to balance A = L + E
+    const totalAssetExCash = bsSeeds.sti + bsSeeds.ar + bsSeeds.prepaid
+      + bsSeeds.ppe + bsSeeds.goodwill + bsSeeds.intangibles + bsSeeds.capsw + bsSeeds.onca
+    const totalLiab = bsSeeds.ap + bsSeeds.accrued + bsSeeds.defrevC + bsSeeds.currentDebt
+      + bsSeeds.ocl + bsSeeds.ltd + bsSeeds.defrevNC + bsSeeds.oncl
+    const cashSeed = Math.max(0, totalLiab - totalAssetExCash + priorRev * 0.10)
+    bsSeeds.cash = cashSeed
+    const totalAssets = cashSeed + totalAssetExCash
+    bsSeeds.re = totalAssets - totalLiab - bsSeeds.cs - bsSeeds.apic - bsSeeds.ts
+
+    // Subtotals
+    bsSeeds.tca = cashSeed + bsSeeds.sti + bsSeeds.ar + bsSeeds.prepaid
+    bsSeeds.tnca = bsSeeds.ppe + bsSeeds.goodwill + bsSeeds.intangibles + bsSeeds.capsw + bsSeeds.onca
+    bsSeeds.totalAssets = bsSeeds.tca + bsSeeds.tnca
+    bsSeeds.tcl = bsSeeds.ap + bsSeeds.accrued + bsSeeds.defrevC + bsSeeds.currentDebt + bsSeeds.ocl
+    bsSeeds.tncl = bsSeeds.ltd + bsSeeds.defrevNC + bsSeeds.oncl
+    bsSeeds.totalLiabilities = bsSeeds.tcl + bsSeeds.tncl
+    bsSeeds.totalEquity = bsSeeds.cs + bsSeeds.apic + bsSeeds.re + bsSeeds.ts
+    bsSeeds.totalLE = bsSeeds.totalLiabilities + bsSeeds.totalEquity
+    bsSeeds.balanceCheck = bsSeeds.totalAssets - bsSeeds.totalLE
+
+    // Write seed values into last historical column (blue font = input per Banker Bible B1)
+    for (const [key, val] of Object.entries(bsSeeds)) {
+      try {
+        const rowNum = bsRows.get(key)
+        const cell = bsSheet.getRow(rowNum).getCell(lastHistCol)
+        cell.value = val
+        applyCurrencyFormat(cell)
+        cell.font = { size: 10, name: "Calibri", color: { argb: "FF0000CC" } }
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${COLOR_HIST_BG}` } }
+        cell.alignment = { horizontal: "right", vertical: "middle" }
+      } catch {
+        // Key not registered in RowTracker, skip
+      }
+    }
   }
 
   // =========================================================================
@@ -2957,6 +3091,48 @@ function getMethodFormulaNote(methodId: string): string {
     geo_segment: "Formula: Rev = SUM(Region_r × FX Rate_r) across all geographies",
   }
   return notes[methodId] ?? ""
+}
+
+// Helper: build a live Excel formula for a revenue methodology from its input rows
+function buildMethodRevenueFormula(
+  methodId: string,
+  inputRows: Record<string, number>,
+  col: string,
+): string {
+  const r = (key: string) => {
+    const row = inputRows[key]
+    return row !== undefined ? `${col}${row}` : "0"
+  }
+  switch (methodId) {
+    case "volume_price":
+      return `${r("vp_units_1")}*${r("vp_asp_1")}+${r("vp_units_2")}*${r("vp_asp_2")}+${r("vp_units_3")}*${r("vp_asp_3")}`
+    case "tam":
+      return `${r("tam_total")}*${r("sam_pct")}*${r("som_share")}`
+    case "sales_capacity":
+      return `(${r("sc_beg_reps")}+${r("sc_new_hires")}-${r("sc_attrition")})*${r("sc_quota")}*${r("sc_attainment")}`
+    case "cohort":
+      return `${r("coh_new_acv")}*${r("coh_new_logos")}`
+    case "arr_waterfall":
+      return `(${r("arr_beg")}*2+${r("arr_new")}+${r("arr_expansion")}-${r("arr_churn")}-${r("arr_contraction")})/2`
+    case "same_store":
+      return `${r("ss_existing")}*${r("ss_rev_per")}*(1+${r("ss_sssg")})+${r("ss_new_stores")}*${r("ss_new_rev")}*${r("ss_partial")}`
+    case "backlog":
+      return `${r("bl_opening")}*${r("bl_burn_rate")}`
+    case "yield":
+      return `${r("yld_assets")}*${r("yld_nim")}+${r("yld_aum")}*${r("yld_mgmt_fee")}+${r("yld_nonint")}`
+    case "usage":
+      return `${r("usg_customers")}*(1+${r("usg_cust_growth")})*${r("usg_avg_usage")}*12*(1+${r("usg_usage_growth")})*${r("usg_price")}*(1-${r("usg_vol_disc")})`
+    case "advertising":
+      return `${r("ad_dau")}*${r("ad_sessions")}*${r("ad_load")}*${r("ad_cpm")}/1000*365+${r("ad_gmv")}*${r("ad_take_rate")}`
+    case "recurring_split":
+      return `${r("rnr_sub_arr")}+${r("rnr_sub_arr")}*${r("rnr_maint_rate")}+${r("rnr_new_cust")}*${r("rnr_ps_attach")}*${r("rnr_ps_avg")}+${r("rnr_new_cust")}*${r("rnr_impl")}`
+    case "channel_mix":
+      return `${r("ch_direct_deals")}*${r("ch_direct_acv")}+${r("ch_partner_deals")}*${r("ch_direct_acv")}*(1-${r("ch_partner_disc")})+${r("ch_oem_deals")}*${r("ch_direct_acv")}*(1-${r("ch_oem_disc")})`
+    case "geo_segment":
+      return `${r("geo_na_rev")}+${r("geo_eu_rev")}*${r("geo_eu_fx")}+${r("geo_apac_rev")}*${r("geo_apac_fx")}`
+    default:
+      return "0"
+  }
 }
 
 // ---------------------------------------------------------------------------

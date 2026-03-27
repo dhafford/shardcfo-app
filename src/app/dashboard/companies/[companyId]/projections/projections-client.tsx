@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronRight, ChevronLeft, Settings2, BarChart3, TrendingUp, Download } from "lucide-react";
+import { toast } from "sonner";
+import { AuditScoreBadge, parseAuditHeaders, type AuditDetails } from "@/components/audit-score-badge";
 import { type HistoricalYear, type ProjectedYear, type ProjectionAssumptions } from "@/lib/projections/types";
 import { getIndustryBenchmarks } from "@/lib/projections/benchmarks";
 import { runProjection } from "@/lib/projections/engine";
@@ -81,6 +83,7 @@ export function ProjectionsClient({
   );
 
   const [isExporting, setIsExporting] = React.useState(false);
+  const [lastAudit, setLastAudit] = React.useState<AuditDetails | null>(null);
 
   async function exportToExcel() {
     setIsExporting(true);
@@ -98,6 +101,10 @@ export function ProjectionsClient({
         }),
       });
       if (!res.ok) throw new Error("Export failed");
+
+      const audit = parseAuditHeaders(res);
+      setLastAudit(audit);
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -105,8 +112,18 @@ export function ProjectionsClient({
       a.download = `${companyName.replace(/[^a-zA-Z0-9 _-]/g, "")} - 3-Statement Model.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
+
+      if (audit) {
+        if (audit.sectionAPass && audit.pct >= 90) {
+          toast.success(`Banker Bible Audit: ${audit.pct}% (${audit.passed}/${audit.total})`);
+        } else if (audit.sectionAPass) {
+          toast.warning(`Banker Bible Audit: ${audit.pct}% — ${audit.failures.length} items need attention`);
+        } else {
+          toast.error(`Banker Bible Audit: Section A FAILED — model is not client-ready`);
+        }
+      }
     } catch {
-      // Could add toast notification here
+      toast.error("Export failed");
     } finally {
       setIsExporting(false);
     }
@@ -246,6 +263,7 @@ export function ProjectionsClient({
             <Button variant="outline" onClick={() => setStep("assumptions")}>
               <ChevronLeft className="w-4 h-4 mr-1" /> Edit Assumptions
             </Button>
+            <AuditScoreBadge audit={lastAudit} />
             <Button
               variant="outline"
               onClick={exportToExcel}

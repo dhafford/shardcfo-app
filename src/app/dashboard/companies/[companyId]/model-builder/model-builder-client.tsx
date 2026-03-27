@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   ChevronRight,
 } from "lucide-react";
+import { toast } from "sonner";
+import { AuditScoreBadge, parseAuditHeaders, type AuditDetails } from "@/components/audit-score-badge";
 import { type HistoricalYear, type ProjectionAssumptions, PROJECTION_YEARS } from "@/lib/projections/types";
 import { getIndustryBenchmarks } from "@/lib/projections/benchmarks";
 import { runProjection } from "@/lib/projections/engine";
@@ -445,6 +447,7 @@ export function ModelBuilderClient({
   );
 
   const [isExporting, setIsExporting] = React.useState(false);
+  const [lastAudit, setLastAudit] = React.useState<AuditDetails | null>(null);
   const balanceCheckPassing = projected.every((p) => Math.abs(p.balanceCheck) < 0.01);
 
   const activeRevMethodsList = REVENUE_METHODS.filter((m) => selectedRevMethods.has(m.id));
@@ -472,6 +475,11 @@ export function ModelBuilderClient({
         }),
       });
       if (!res.ok) throw new Error("Export failed");
+
+      // Parse audit results from response headers
+      const audit = parseAuditHeaders(res);
+      setLastAudit(audit);
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -479,6 +487,26 @@ export function ModelBuilderClient({
       a.download = `${companyName.replace(/[^a-zA-Z0-9 _-]/g, "")} - Full Model.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
+
+      // Show audit toast
+      if (audit) {
+        if (audit.sectionAPass && audit.pct >= 90) {
+          toast.success(`Banker Bible Audit: ${audit.pct}% (${audit.passed}/${audit.total})`, {
+            description: "All gating criteria passed — model is client-ready.",
+          });
+        } else if (audit.sectionAPass) {
+          toast.warning(`Banker Bible Audit: ${audit.pct}% (${audit.passed}/${audit.total})`, {
+            description: `Section A passed, but ${audit.failures.length} quality items need attention.`,
+          });
+        } else {
+          const gatingCount = audit.failures.filter((f) => f.g).length;
+          toast.error(`Banker Bible Audit: ${audit.pct}% — Section A FAILED`, {
+            description: `${gatingCount} gating failure${gatingCount !== 1 ? "s" : ""} — model is not client-ready.`,
+          });
+        }
+      }
+    } catch {
+      toast.error("Export failed", { description: "Could not generate the Excel model." });
     } finally {
       setIsExporting(false);
     }
@@ -748,10 +776,13 @@ export function ModelBuilderClient({
                 {projected.length} years projected from {historicals.length} years of historicals
               </span>
             </div>
-            <Button onClick={exportToExcel} disabled={isExporting || projected.length === 0} className="gap-1.5">
-              <Download className="w-4 h-4" />
-              {isExporting ? "Building Excel Model…" : "Export Full Model (.xlsx)"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <AuditScoreBadge audit={lastAudit} />
+              <Button onClick={exportToExcel} disabled={isExporting || projected.length === 0} className="gap-1.5">
+                <Download className="w-4 h-4" />
+                {isExporting ? "Building Excel Model…" : "Export Full Model (.xlsx)"}
+              </Button>
+            </div>
           </div>
 
           {/* Summary strip */}
