@@ -494,7 +494,7 @@ export async function saveClassificationOverrides(
     normalizedName: string;
     category: string;
     sectionId: string;
-    statementType: string;
+    statementType: ClassificationOverride["statementType"];
   }>,
 ): Promise<{ saved: number; errors: string[] }> {
   const { supabase } = await requireAuth({ redirect: false });
