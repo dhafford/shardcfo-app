@@ -70,7 +70,7 @@ interface SummaryResponse {
 }
 
 const QBO_API_URL =
-  process.env.NEXT_PUBLIC_QBO_PARSER_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_QBO_PARSER_URL || "/api/qbo";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -474,7 +474,7 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
       if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
         setParseError(
           `Cannot reach the QBO parser service at ${QBO_API_URL}. ` +
-            "Start it with: uvicorn qbo_parser.api:app --reload",
+            "The parser API may still be deploying.",
         );
       } else {
         setParseError(msg);

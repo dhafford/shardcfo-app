@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/qbo/:path*",
+      "destination": "/api/qbo.py"
+    }
+  ]
+}

@@ -1,3 +1,5 @@
-qbo-parser/
 deck-graphics/
 *.pptx
+qbo-parser/.venv/
+qbo-parser/tests/
+qbo-parser/examples/
