@@ -84,7 +84,7 @@ export async function exportParsedReport(
       company_id: companyId,
       file_name: fileName,
       file_url: "",
-      file_type: "qbo_beta",
+      file_type: "xlsx",
       status: "processing",
       row_count: 0,
       mapping_config: { report_type: report.report_type, columns: report.columns },
