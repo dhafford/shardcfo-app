@@ -3,9 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { PeriodSelector } from "@/components/shared/period-selector";
 import { PnlTable } from "@/components/financials/pnl-table";
+import { CashFlowTable } from "@/components/financials/cash-flow-table";
 import { FinancialsToolbar } from "@/components/financials/financials-toolbar";
 import { format } from "date-fns";
 import { getDateRangeFromParams } from "@/lib/date-utils";
+import { fetchComputedCashFlow } from "./cash-flow-actions";
 import type { PnlDataPoint, ComparisonMode } from "@/components/financials/pnl-table";
 import type { FinancialPeriodRow, AccountRow, LineItemRow } from "@/lib/supabase/types";
 
@@ -257,11 +259,33 @@ export default async function FinancialsPage({ params, searchParams }: Financial
         )}
 
         {view === "cash_flow" && (
-          <div className="flex items-center justify-center h-64 text-muted-foreground text-sm rounded-lg border border-dashed bg-white">
-            Cash Flow view coming soon.
-          </div>
+          <CashFlowView companyId={companyId} />
         )}
       </div>
+    </div>
+  );
+}
+
+async function CashFlowView({ companyId }: { companyId: string }) {
+  const cashFlow = await fetchComputedCashFlow(companyId);
+
+  if (cashFlow.periods.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground text-sm rounded-lg border border-dashed bg-white">
+        {cashFlow.warnings[0] || "No cash flow data available. Import at least 2 periods of IS + BS data."}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-base font-semibold">Statement of Cash Flows</h2>
+        <p className="text-sm text-muted-foreground">
+          Computed from Income Statement and Balance Sheet data (indirect method)
+        </p>
+      </div>
+      <CashFlowTable cashFlow={cashFlow} />
     </div>
   );
 }
