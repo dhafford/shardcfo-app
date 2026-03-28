@@ -35,6 +35,8 @@ import {
   exportParsedReport,
   type ExportResult,
 } from "@/app/dashboard/companies/[companyId]/financials/import/qbo-export-actions";
+import { createClient } from "@/lib/supabase/client";
+import { registerFile } from "@/app/dashboard/companies/[companyId]/files/actions";
 
 // ---------------------------------------------------------------------------
 // Types matching qbo-parser API output
@@ -578,6 +580,7 @@ export function QboImportViewer({ className, companyId }: QboImportViewerProps) 
   const [report, setReport] = React.useState<ParsedReport | null>(null);
   const [summary, setSummary] = React.useState<SummaryResponse | null>(null);
   const [fileName, setFileName] = React.useState("");
+  const fileRef = React.useRef<File | null>(null);
 
   // Reclassification state
   const [reclassifications, setReclassifications] = React.useState<
@@ -600,6 +603,7 @@ export function QboImportViewer({ className, companyId }: QboImportViewerProps) 
     setReport(null);
     setSummary(null);
     setFileName(file.name);
+    fileRef.current = file;
     setReclassifications(new Map());
     setExportResult(null);
     setExportError(null);
@@ -667,7 +671,28 @@ export function QboImportViewer({ className, companyId }: QboImportViewerProps) 
     setExportResult(null);
 
     try {
-      // Convert Map to plain Record for the server action
+      // 1. Upload original file to Supabase Storage so it can be re-downloaded
+      if (fileRef.current) {
+        const supabase = createClient();
+        const storagePath = `${companyId}/${crypto.randomUUID()}_${fileRef.current.name}`;
+        const { error: storageErr } = await supabase.storage
+          .from("company-files")
+          .upload(storagePath, fileRef.current);
+
+        if (!storageErr) {
+          await registerFile({
+            companyId,
+            fileName: fileRef.current.name,
+            fileSize: fileRef.current.size,
+            mimeType: fileRef.current.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            category: "historicals",
+            storagePath,
+            notes: `QBO ${report.report_type.replace(/_/g, " ")} import`,
+          });
+        }
+      }
+
+      // 2. Export parsed data to accounts/periods/line_items
       const reclassRecord: Record<string, CategoryMapping> = {};
       reclassifications.forEach((val, key) => {
         reclassRecord[key] = val;
@@ -711,6 +736,7 @@ export function QboImportViewer({ className, companyId }: QboImportViewerProps) 
     setSummary(null);
     setParseError(null);
     setFileName("");
+    fileRef.current = null;
     setReclassifications(new Map());
     setExportResult(null);
     setExportError(null);
@@ -816,14 +842,23 @@ export function QboImportViewer({ className, companyId }: QboImportViewerProps) 
                   Exported: {exportResult.accountsCreated} accounts created
                   {exportResult.accountsUpdated > 0 && `, ${exportResult.accountsUpdated} updated`}
                   , {exportResult.periodsCreated} periods, {exportResult.lineItemsUpserted} line items.
+                  File saved.
                 </span>
               </div>
-              <a
-                href={`/dashboard/companies/${companyId}/financials`}
-                className="text-emerald-800 underline font-medium text-xs"
-              >
-                View Financials
-              </a>
+              <div className="flex items-center gap-3">
+                <a
+                  href={`/dashboard/companies/${companyId}/files`}
+                  className="text-emerald-800 underline font-medium text-xs"
+                >
+                  Files
+                </a>
+                <a
+                  href={`/dashboard/companies/${companyId}/financials`}
+                  className="text-emerald-800 underline font-medium text-xs"
+                >
+                  Financials
+                </a>
+              </div>
             </div>
           )}
 
