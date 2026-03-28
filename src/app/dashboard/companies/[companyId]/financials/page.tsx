@@ -128,21 +128,29 @@ export default async function FinancialsPage({ params, searchParams }: Financial
   let startStr = format(startDate, "yyyy-MM-dd");
   let endStr = format(endDate, "yyyy-MM-dd");
 
-  // If no explicit range is set, check if there's data outside the default
-  // window and expand to cover all periods with data
+  // When no explicit range is selected, show ALL months that have data
   if (!hasExplicitRange) {
-    const { data: bounds } = await supabase
+    const { data: earliest } = await supabase
       .from("financial_periods")
       .select("period_date")
       .eq("company_id", companyId)
       .eq("period_type", "actual")
       .order("period_date", { ascending: true })
       .limit(1);
-    if (bounds && bounds.length > 0) {
-      const earliest = (bounds[0] as { period_date: string }).period_date;
-      if (earliest < startStr) {
-        startStr = earliest;
-      }
+    const { data: latest } = await supabase
+      .from("financial_periods")
+      .select("period_date")
+      .eq("company_id", companyId)
+      .eq("period_type", "actual")
+      .order("period_date", { ascending: false })
+      .limit(1);
+    if (earliest?.[0]) {
+      const d = (earliest[0] as { period_date: string }).period_date;
+      if (d < startStr) startStr = d;
+    }
+    if (latest?.[0]) {
+      const d = (latest[0] as { period_date: string }).period_date;
+      if (d > endStr) endStr = d;
     }
   }
 
