@@ -351,7 +351,44 @@ function RowNode({ row, columns }: { row: ParsedRow; columns: string[] }) {
   );
 }
 
-function SectionView({
+function SectionTotalRow({
+  label,
+  total,
+  columns,
+}: {
+  label: string;
+  total: Record<string, number | null>;
+  columns: string[];
+}) {
+  return (
+    <TableRow className="bg-slate-100 border-t border-slate-200">
+      <TableCell className="text-sm font-semibold text-slate-700 py-1.5">
+        {label}
+      </TableCell>
+      {columns.map((col) => {
+        const val = total[col];
+        return (
+          <TableCell
+            key={col}
+            className={cn(
+              "text-sm text-right tabular-nums font-semibold py-1.5",
+              val !== null && val !== undefined && val < 0 && "text-red-600",
+            )}
+          >
+            {val !== null && val !== undefined
+              ? val.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              : ""}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
+}
+
+function SectionRows({
   section,
   columns,
 }: {
@@ -361,56 +398,53 @@ function SectionView({
   const [expanded, setExpanded] = React.useState(true);
   const hasTotals = section.total && Object.values(section.total).some((v) => v !== null);
 
-  return (
-    <div className="border rounded-lg overflow-hidden">
-      <button
-        className="w-full flex items-center justify-between px-3 py-2 bg-slate-100 hover:bg-slate-200 transition-colors"
-        onClick={() => setExpanded(!expanded)}
+  // Section header row
+  const headerRow = (
+    <TableRow className="bg-slate-50/80 border-t-2 border-slate-200">
+      <TableCell
+        colSpan={columns.length + 1}
+        className="py-1.5"
       >
-        <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          {expanded ? (
-            <ChevronDown className="w-4 h-4" />
-          ) : (
-            <ChevronRight className="w-4 h-4" />
-          )}
+        <button
+          className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 hover:text-slate-900"
+          onClick={() => setExpanded(!expanded)}
+        >
+          {section.rows.length > 0 ? (
+            expanded ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )
+          ) : null}
           {section.name}
-        </span>
-        {hasTotals && (
-          <span className="text-sm font-semibold tabular-nums text-slate-600">
-            {formatCurrency(section.total[columns[columns.length - 1] || "Total"])}
-          </span>
-        )}
-      </button>
-      {expanded && section.rows.length > 0 && (
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs">Account</TableHead>
-                {columns.map((col) => (
-                  <TableHead key={col} className="text-xs text-right">
-                    {col}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <RowTree rows={section.rows} columns={columns} />
-            </TableBody>
-          </Table>
-        </div>
+        </button>
+      </TableCell>
+    </TableRow>
+  );
+
+  // Standalone section (no child rows, just a total — e.g. Gross Profit, Net Income)
+  if (section.rows.length === 0 && hasTotals) {
+    return (
+      <SectionTotalRow
+        label={section.name}
+        total={section.total}
+        columns={columns}
+      />
+    );
+  }
+
+  return (
+    <>
+      {headerRow}
+      {expanded && <RowTree rows={section.rows} columns={columns} />}
+      {hasTotals && (
+        <SectionTotalRow
+          label={`Total ${section.name}`}
+          total={section.total}
+          columns={columns}
+        />
       )}
-      {expanded && section.rows.length === 0 && hasTotals && (
-        <div className="px-3 py-2 text-sm text-muted-foreground">
-          <div className="flex justify-between">
-            <span>{section.name}</span>
-            <span className="font-semibold tabular-nums">
-              {formatCurrency(section.total[columns[columns.length - 1] || "Total"])}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -605,15 +639,34 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
             />
           )}
 
-          {/* Sections */}
-          <div className="space-y-3">
-            {report.sections.map((section, idx) => (
-              <SectionView
-                key={idx}
-                section={section}
-                columns={report.columns}
-              />
-            ))}
+          {/* Sections — single table with frozen header */}
+          <div className="border rounded-lg overflow-auto max-h-[600px]">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_theme(colors.slate.200)]">
+                <TableRow>
+                  <TableHead className="text-xs font-semibold min-w-[240px]">
+                    Account
+                  </TableHead>
+                  {report.columns.map((col) => (
+                    <TableHead
+                      key={col}
+                      className="text-xs font-semibold text-right min-w-[100px]"
+                    >
+                      {col}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.sections.map((section, idx) => (
+                  <SectionRows
+                    key={idx}
+                    section={section}
+                    columns={report.columns}
+                  />
+                ))}
+              </TableBody>
+            </Table>
           </div>
         </>
       )}
