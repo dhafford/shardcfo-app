@@ -61,6 +61,8 @@ export const SECTION_MAP: Record<string, AccountCategory> = {
   "non-current assets": "asset",
   "other assets": "asset",
   liabilities: "liability",
+  "liabilities and equity": "liability",
+  "liabilities  equity": "liability",
   "current liabilities": "liability",
   "long-term liabilities": "liability",
   "non-current liabilities": "liability",
