@@ -3,7 +3,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -21,9 +20,21 @@ import {
   ChevronDown,
   AlertTriangle,
   CheckCircle,
-  TrendingUp,
-  TrendingDown,
+  ArrowRightLeft,
+  Save,
 } from "lucide-react";
+import {
+  getCategoryOptionsForReportType,
+  parseCategoryOptionValue,
+  makeRowKey,
+  isExportableRow,
+  type CategoryMapping,
+  type CategoryOption,
+} from "@/lib/import/qbo-section-mapping";
+import {
+  exportParsedReport,
+  type ExportResult,
+} from "@/app/dashboard/companies/[companyId]/financials/import/qbo-export-actions";
 
 // ---------------------------------------------------------------------------
 // Types matching qbo-parser API output
@@ -113,7 +124,7 @@ function formatPeriod(period: { start_date: string; end_date: string }): string 
 }
 
 // ---------------------------------------------------------------------------
-// File drop zone (reused pattern)
+// File drop zone
 // ---------------------------------------------------------------------------
 
 function FileDropZone({
@@ -174,7 +185,7 @@ function FileDropZone({
 }
 
 // ---------------------------------------------------------------------------
-// Summary card
+// Summary cards
 // ---------------------------------------------------------------------------
 
 function MetricCard({
@@ -260,38 +271,110 @@ function SummaryCards({
 }
 
 // ---------------------------------------------------------------------------
+// Reclassification dropdown
+// ---------------------------------------------------------------------------
+
+function ReclassifySelect({
+  options,
+  currentValue,
+  onChange,
+}: {
+  options: CategoryOption[];
+  currentValue: string | null;
+  onChange: (value: string) => void;
+}) {
+  if (options.length === 0) return null;
+
+  return (
+    <select
+      className="ml-auto text-[11px] h-6 px-1.5 rounded border border-slate-200 bg-white text-slate-600 opacity-0 group-hover/row:opacity-100 transition-opacity focus:opacity-100 cursor-pointer"
+      value={currentValue || ""}
+      onChange={(e) => onChange(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <option value="" disabled>
+        Reclassify…
+      </option>
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Section tree
 // ---------------------------------------------------------------------------
 
 function RowTree({
   rows,
   columns,
+  sectionName,
+  categoryOptions,
+  reclassifications,
+  onReclassify,
   depth = 0,
 }: {
   rows: ParsedRow[];
   columns: string[];
+  sectionName: string;
+  categoryOptions: CategoryOption[];
+  reclassifications: Map<string, CategoryMapping>;
+  onReclassify: (rowKey: string, value: string) => void;
   depth?: number;
 }) {
   return (
     <>
       {rows.map((row, idx) => (
-        <RowNode key={`${depth}-${idx}`} row={row} columns={columns} />
+        <RowNode
+          key={`${depth}-${idx}`}
+          row={row}
+          columns={columns}
+          sectionName={sectionName}
+          categoryOptions={categoryOptions}
+          reclassifications={reclassifications}
+          onReclassify={onReclassify}
+        />
       ))}
     </>
   );
 }
 
-function RowNode({ row, columns }: { row: ParsedRow; columns: string[] }) {
+function RowNode({
+  row,
+  columns,
+  sectionName,
+  categoryOptions,
+  reclassifications,
+  onReclassify,
+}: {
+  row: ParsedRow;
+  columns: string[];
+  sectionName: string;
+  categoryOptions: CategoryOption[];
+  reclassifications: Map<string, CategoryMapping>;
+  onReclassify: (rowKey: string, value: string) => void;
+}) {
   const [expanded, setExpanded] = React.useState(row.depth < 2);
   const hasChildren = row.children.length > 0;
   const indent = row.depth * 16;
+  const canReclassify = !row.is_total && isExportableRow(row) && categoryOptions.length > 0;
+  const rowKey = makeRowKey(sectionName, row);
+  const reclassified = reclassifications.get(rowKey);
+  const currentOptionValue = reclassified
+    ? `${reclassified.category}${reclassified.subcategory ? ":" + reclassified.subcategory : ""}`
+    : null;
 
   return (
     <>
       <TableRow
         className={cn(
+          "group/row",
           row.is_total && "bg-slate-50 font-semibold",
           !row.is_total && row.depth === 0 && "bg-slate-100/50",
+          reclassified && "bg-amber-50/40",
         )}
       >
         <TableCell
@@ -321,6 +404,19 @@ function RowNode({ row, columns }: { row: ParsedRow; columns: string[] }) {
             <span className={row.is_total ? "text-slate-700" : ""}>
               {row.account_name}
             </span>
+            {reclassified && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">
+                <ArrowRightLeft className="w-2.5 h-2.5" />
+                {categoryOptions.find((o) => o.value === currentOptionValue)?.label || reclassified.category}
+              </span>
+            )}
+            {canReclassify && (
+              <ReclassifySelect
+                options={categoryOptions}
+                currentValue={currentOptionValue}
+                onChange={(val) => onReclassify(rowKey, val)}
+              />
+            )}
           </span>
         </TableCell>
         {columns.map((col) => {
@@ -345,7 +441,15 @@ function RowNode({ row, columns }: { row: ParsedRow; columns: string[] }) {
         })}
       </TableRow>
       {hasChildren && expanded && (
-        <RowTree rows={row.children} columns={columns} depth={row.depth + 1} />
+        <RowTree
+          rows={row.children}
+          columns={columns}
+          sectionName={sectionName}
+          categoryOptions={categoryOptions}
+          reclassifications={reclassifications}
+          onReclassify={onReclassify}
+          depth={row.depth + 1}
+        />
       )}
     </>
   );
@@ -391,20 +495,22 @@ function SectionTotalRow({
 function SectionRows({
   section,
   columns,
+  categoryOptions,
+  reclassifications,
+  onReclassify,
 }: {
   section: ParsedSection;
   columns: string[];
+  categoryOptions: CategoryOption[];
+  reclassifications: Map<string, CategoryMapping>;
+  onReclassify: (rowKey: string, value: string) => void;
 }) {
   const [expanded, setExpanded] = React.useState(true);
   const hasTotals = section.total && Object.values(section.total).some((v) => v !== null);
 
-  // Section header row
   const headerRow = (
     <TableRow className="bg-slate-50/80 border-t-2 border-slate-200">
-      <TableCell
-        colSpan={columns.length + 1}
-        className="py-1.5"
-      >
+      <TableCell colSpan={columns.length + 1} className="py-1.5">
         <button
           className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 hover:text-slate-900"
           onClick={() => setExpanded(!expanded)}
@@ -422,7 +528,6 @@ function SectionRows({
     </TableRow>
   );
 
-  // Standalone section (no child rows, just a total — e.g. Gross Profit, Net Income)
   if (section.rows.length === 0 && hasTotals) {
     return (
       <SectionTotalRow
@@ -436,7 +541,16 @@ function SectionRows({
   return (
     <>
       {headerRow}
-      {expanded && <RowTree rows={section.rows} columns={columns} />}
+      {expanded && (
+        <RowTree
+          rows={section.rows}
+          columns={columns}
+          sectionName={section.name}
+          categoryOptions={categoryOptions}
+          reclassifications={reclassifications}
+          onReclassify={onReclassify}
+        />
+      )}
       {hasTotals && (
         <SectionTotalRow
           label={`Total ${section.name}`}
@@ -457,7 +571,7 @@ interface QboImportViewerProps {
   companyId?: string;
 }
 
-export function QboImportViewer({ className }: QboImportViewerProps) {
+export function QboImportViewer({ className, companyId }: QboImportViewerProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [isParsing, setIsParsing] = React.useState(false);
   const [parseError, setParseError] = React.useState<string | null>(null);
@@ -465,18 +579,35 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
   const [summary, setSummary] = React.useState<SummaryResponse | null>(null);
   const [fileName, setFileName] = React.useState("");
 
+  // Reclassification state
+  const [reclassifications, setReclassifications] = React.useState<
+    Map<string, CategoryMapping>
+  >(new Map());
+
+  // Export state
+  const [isExporting, setIsExporting] = React.useState(false);
+  const [exportResult, setExportResult] = React.useState<ExportResult | null>(null);
+  const [exportError, setExportError] = React.useState<string | null>(null);
+
+  const categoryOptions = React.useMemo(
+    () => (report ? getCategoryOptionsForReportType(report.report_type) : []),
+    [report],
+  );
+
   const handleFile = React.useCallback(async (file: File) => {
     setParseError(null);
     setIsParsing(true);
     setReport(null);
     setSummary(null);
     setFileName(file.name);
+    setReclassifications(new Map());
+    setExportResult(null);
+    setExportError(null);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
 
-      // Fire both API calls in parallel
       const [parseRes, summaryRes] = await Promise.all([
         fetch(`${QBO_API_URL}/parse`, { method: "POST", body: formData }),
         (() => {
@@ -491,9 +622,7 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
 
       if (!parseRes.ok) {
         const err = await parseRes.json().catch(() => null);
-        throw new Error(
-          err?.detail || `Parser returned ${parseRes.status}`,
-        );
+        throw new Error(err?.detail || `Parser returned ${parseRes.status}`);
       }
 
       const parseData: ParsedReport = await parseRes.json();
@@ -518,6 +647,50 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
     }
   }, []);
 
+  const handleReclassify = React.useCallback((rowKey: string, value: string) => {
+    setReclassifications((prev) => {
+      const next = new Map(prev);
+      if (!value) {
+        next.delete(rowKey);
+      } else {
+        next.set(rowKey, parseCategoryOptionValue(value));
+      }
+      return next;
+    });
+  }, []);
+
+  const handleExport = React.useCallback(async () => {
+    if (!report || !companyId) return;
+
+    setIsExporting(true);
+    setExportError(null);
+    setExportResult(null);
+
+    try {
+      // Convert Map to plain Record for the server action
+      const reclassRecord: Record<string, CategoryMapping> = {};
+      reclassifications.forEach((val, key) => {
+        reclassRecord[key] = val;
+      });
+
+      const result = await exportParsedReport({
+        companyId,
+        report,
+        reclassifications: reclassRecord,
+        fileName,
+      });
+
+      setExportResult(result);
+      if (!result.success && result.errors.length > 0) {
+        setExportError(result.errors[0]);
+      }
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [report, companyId, reclassifications, fileName]);
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -538,6 +711,9 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
     setSummary(null);
     setParseError(null);
     setFileName("");
+    setReclassifications(new Map());
+    setExportResult(null);
+    setExportError(null);
   };
 
   return (
@@ -592,10 +768,30 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
                 </span>
               )}
             </div>
-            <Button variant="ghost" size="sm" onClick={reset}>
-              <X className="w-4 h-4 mr-1" />
-              Clear
-            </Button>
+            <div className="flex items-center gap-2">
+              {reclassifications.size > 0 && (
+                <span className="text-xs text-amber-600 font-medium">
+                  {reclassifications.size} reclassified
+                </span>
+              )}
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={handleExport}
+                disabled={!companyId || isExporting || exportResult?.success === true}
+              >
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4 mr-1" />
+                )}
+                Export to Financials
+              </Button>
+              <Button variant="ghost" size="sm" onClick={reset}>
+                <X className="w-4 h-4 mr-1" />
+                Clear
+              </Button>
+            </div>
           </div>
 
           {/* Company + Period */}
@@ -610,6 +806,32 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
               {report.sections.length} section{report.sections.length !== 1 ? "s" : ""}
             </span>
           </div>
+
+          {/* Export result */}
+          {exportResult && exportResult.success && (
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4" />
+                <span>
+                  Exported: {exportResult.accountsCreated} accounts created
+                  {exportResult.accountsUpdated > 0 && `, ${exportResult.accountsUpdated} updated`}
+                  , {exportResult.periodsCreated} periods, {exportResult.lineItemsUpserted} line items.
+                </span>
+              </div>
+              <a
+                href={`/dashboard/companies/${companyId}/financials`}
+                className="text-emerald-800 underline font-medium text-xs"
+              >
+                View Financials
+              </a>
+            </div>
+          )}
+
+          {exportError && !exportResult?.success && (
+            <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+              Export failed: {exportError}
+            </div>
+          )}
 
           {/* Validation status */}
           {report.validation_warnings.length === 0 ? (
@@ -639,6 +861,14 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
             />
           )}
 
+          {/* Reclassification hint */}
+          {categoryOptions.length > 0 && !exportResult?.success && (
+            <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-500">
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+              Hover any account row to reclassify it before exporting.
+            </div>
+          )}
+
           {/* Sections — single table with frozen header */}
           <div className="border rounded-lg overflow-auto max-h-[600px]">
             <Table>
@@ -663,6 +893,9 @@ export function QboImportViewer({ className }: QboImportViewerProps) {
                     key={idx}
                     section={section}
                     columns={report.columns}
+                    categoryOptions={categoryOptions}
+                    reclassifications={reclassifications}
+                    onReclassify={handleReclassify}
                   />
                 ))}
               </TableBody>
