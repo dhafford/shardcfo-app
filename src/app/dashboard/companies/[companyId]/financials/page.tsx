@@ -123,9 +123,28 @@ export default async function FinancialsPage({ params, searchParams }: Financial
     .single();
   if (!company) notFound();
 
+  const hasExplicitRange = !!sp.range;
   const { startDate, endDate } = getDateRangeFromParams(sp);
-  const startStr = format(startDate, "yyyy-MM-dd");
-  const endStr = format(endDate, "yyyy-MM-dd");
+  let startStr = format(startDate, "yyyy-MM-dd");
+  let endStr = format(endDate, "yyyy-MM-dd");
+
+  // If no explicit range is set, check if there's data outside the default
+  // window and expand to cover all periods with data
+  if (!hasExplicitRange) {
+    const { data: bounds } = await supabase
+      .from("financial_periods")
+      .select("period_date")
+      .eq("company_id", companyId)
+      .eq("period_type", "actual")
+      .order("period_date", { ascending: true })
+      .limit(1);
+    if (bounds && bounds.length > 0) {
+      const earliest = (bounds[0] as { period_date: string }).period_date;
+      if (earliest < startStr) {
+        startStr = earliest;
+      }
+    }
+  }
 
   // Fetch actual periods in range (using period_date)
   const { data: actualPeriods } = await supabase
